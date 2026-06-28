@@ -42,7 +42,7 @@ const withQueryKey = <T extends object, K>(
 };
 
 export const getGetDevtoolsImpactUrl = () => {
-	return `http://127.0.0.1:3001/__devtools/impact`;
+	return `/__devtools/impact`;
 };
 
 /**
@@ -64,7 +64,7 @@ export const getDevtoolsImpact = async (
 };
 
 export const getGetDevtoolsImpactQueryKey = () => {
-	return [`http://127.0.0.1:3001/__devtools/impact`] as const;
+	return [`/__devtools/impact`] as const;
 };
 
 export const getGetDevtoolsImpactQueryOptions = <

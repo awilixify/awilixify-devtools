@@ -21,6 +21,15 @@ export const TraceSpanKindSchema = Type.Union(
 
 export type TraceSpanKind = Static<typeof TraceSpanKindSchema>;
 
+// How the failure surfaced: an exception ("thrown") or an error returned as a
+// value, e.g. Result.error ("returned"). Absent on ok spans and old traces.
+export const TraceErrorKindSchema = Type.Union(
+	[Type.Literal("thrown"), Type.Literal("returned")],
+	{ $id: "TraceErrorKind" },
+);
+
+export type TraceErrorKind = Static<typeof TraceErrorKindSchema>;
+
 export const TraceErrorSchema = Type.Object(
 	{
 		name: Type.String(),
@@ -73,13 +82,16 @@ export const TraceSpanSchema = Type.Object(
 		label: Type.String(),
 		moduleId: Type.Union([Type.String(), Type.Null()]),
 		moduleName: Type.Union([Type.String(), Type.Null()]),
-		providerKey: Type.Union([Type.String(), Type.Null()]),
+		className: Type.String(),
+		registrationKey: Type.String(),
 		methodName: Type.String(),
 		args: Type.Array(Type.Any()),
 		result: Type.Any(),
 		error: Type.Union([TraceErrorSchema, Type.Null()]),
+		errorKind: Type.Optional(TraceErrorKindSchema),
 		startedAt: Type.Number(),
 		durationMs: Type.Number(),
+		selfDurationMs: Type.Number(),
 		status: TraceSpanStatusSchema,
 		console: Type.Array(ConsoleEntrySchema),
 	},
@@ -98,6 +110,7 @@ export const TraceSchema = Type.Object(
 		request: TraceRequestSchema,
 		response: Type.Any(),
 		error: Type.Union([TraceErrorSchema, Type.Null()]),
+		errorKind: Type.Optional(TraceErrorKindSchema),
 		startedAt: Type.Number(),
 		durationMs: Type.Number(),
 		status: TraceSpanStatusSchema,

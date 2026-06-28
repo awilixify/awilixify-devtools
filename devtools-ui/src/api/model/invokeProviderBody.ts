@@ -5,10 +5,12 @@
  * API for inspecting module graphs, traces, and provider impact
  * OpenAPI spec version: 1.0.0
  */
+import type { InvokeProviderBodyTraceMethod } from "./invokeProviderBodyTraceMethod";
 
 export interface InvokeProviderBody {
 	scopeModuleId: string;
 	providerKey: string;
 	methodName: string;
 	args: unknown[];
+	traceMethod: (typeof InvokeProviderBodyTraceMethod)[keyof typeof InvokeProviderBodyTraceMethod];
 }

@@ -1,18 +1,9 @@
 import { CodeHighlight } from "@mantine/code-highlight";
 import { ScrollArea, Stack, Text } from "@mantine/core";
 import type { TraceSpan } from "@/api/model/index.js";
-import { stringifyPretty } from "../../../provider-playground/stringifyPretty";
 import { formatSpanLabel } from "../trace-tree/traceFormatting";
-
-function formatMethodCall(methodName: string, args: unknown[]): string {
-	if (!args || args.length === 0) return `${methodName}()`;
-
-	const formattedArgs = args
-		.map((arg) => JSON.stringify(arg, null, 2))
-		.join(", ");
-
-	return `${methodName}(${formattedArgs})`;
-}
+import { formatMethodCall } from "./MethodName";
+import { stringifyPretty } from "./stringifyPretty";
 
 /**
  * For interceptor spans, filters out devtools-only field (decoratorName)
@@ -40,9 +31,9 @@ type ConsoleEntry = {
 };
 
 type SpanDetailsProps = {
+	isOriginError?: boolean;
 	span: TraceSpan | null;
 	traceError?: unknown;
-	traceResponse?: unknown;
 };
 
 function CodeSection({ title, code }: { title: string; code: string }) {
@@ -71,9 +62,9 @@ function CodeSection({ title, code }: { title: string; code: string }) {
 }
 
 export function SpanDetails({
+	isOriginError = false,
 	span,
 	traceError,
-	traceResponse,
 }: SpanDetailsProps) {
 	if (!span) {
 		return (
@@ -85,12 +76,8 @@ export function SpanDetails({
 		);
 	}
 
-	const resultValue =
-		span.kind === "http" && span.result === undefined
-			? traceResponse
-			: span.result;
-	const errorValue =
-		span.kind === "http" && span.error === undefined ? traceError : span.error;
+	const resultValue = span.result;
+	const errorValue = span.error === undefined ? traceError : span.error;
 
 	const consoleCode =
 		span.console.length > 0
@@ -107,11 +94,19 @@ export function SpanDetails({
 				code={formatMethodCall(span.methodName, getDisplayArgs(span))}
 			/>
 			<CodeSection
-				title={span.status === "ok" ? "Result" : "Error"}
+				title={
+					span.status === "ok"
+						? "Result"
+						: isOriginError
+							? span.errorKind === "returned"
+								? "Returned error"
+								: "Thrown error"
+							: "Propagated error"
+				}
 				code={
 					span.status === "ok"
 						? `return ${stringifyPretty(resultValue)}`
-						: `throw ${stringifyPretty(errorValue)}`
+						: formatErrorCode(errorValue, isOriginError, span.errorKind)
 				}
 			/>
 			<CodeSection
@@ -120,6 +115,37 @@ export function SpanDetails({
 			/>
 		</Stack>
 	);
+}
+
+// Failed spans either threw or returned the error as a value (Result.error);
+// mirror that in the shown pseudo-code. Old traces predate errorKind and are
+// rendered as thrown.
+function formatErrorCode(
+	errorValue: unknown,
+	isOriginError: boolean,
+	errorKind: TraceSpan["errorKind"],
+): string {
+	const isReturned = errorKind === "returned";
+
+	if (isOriginError) {
+		return isReturned
+			? `return Result.error(${stringifyPretty(errorValue)})`
+			: `throw ${stringifyPretty(errorValue)}`;
+	}
+
+	const error =
+		errorValue && typeof errorValue === "object"
+			? (errorValue as { message?: unknown; name?: unknown })
+			: null;
+	const name = typeof error?.name === "string" ? error.name : "Error";
+	const message =
+		typeof error?.message === "string" ? error.message : String(errorValue);
+
+	return `// Error propagated from a child span.\n${
+		isReturned
+			? `return Result.error(${name}: ${message})`
+			: `throw ${name}: ${message}`
+	}`;
 }
 
 function formatConsoleCall(entry: ConsoleEntry): string {

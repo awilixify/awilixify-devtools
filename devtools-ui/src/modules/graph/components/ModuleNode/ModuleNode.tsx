@@ -1,11 +1,13 @@
-import clsx from "clsx";
 import { Badge, Group, Paper, Stack, Text } from "@mantine/core";
 import { Handle, type NodeProps, Position } from "@xyflow/react";
+import clsx from "clsx";
 import { useGraphSettings } from "../../GraphSettingsContext";
 import type { ModuleFlowNode } from "../../types";
+import { EntrypointsHover } from "./EntrypointsHover";
 import { GlobalProvidersHover } from "./GlobalProvidersHover";
 import { HighlightedText } from "./HighlightedText";
 import styles from "./ModuleNode.module.css";
+import { ModuleStatsHover } from "./ModuleStatsHover";
 import { ProviderGroup } from "./ProviderGroup";
 
 export function ModuleNode({ data, selected }: NodeProps<ModuleFlowNode>) {
@@ -22,13 +24,10 @@ export function ModuleNode({ data, selected }: NodeProps<ModuleFlowNode>) {
 			component="article"
 			data-module-node
 			data-selected={selected ? "true" : undefined}
-			p="md"
-			radius="sm"
 			shadow="md"
 			style={{
 				"--module-node-border-color": data.providerRelationColor,
 			}}
-			withBorder
 		>
 			{!isProviderMode && <Handle type="target" position={Position.Left} />}
 
@@ -36,11 +35,15 @@ export function ModuleNode({ data, selected }: NodeProps<ModuleFlowNode>) {
 				<Text component="strong" fw={700} truncate>
 					<HighlightedText query={searchQuery} text={moduleTitle} />
 				</Text>
-				<GlobalProvidersHover data={data} />
+				<Group gap={4} wrap="nowrap">
+					<ModuleStatsHover data={data} />
+					<EntrypointsHover data={data} />
+					<GlobalProvidersHover data={data} />
+				</Group>
 			</Group>
 
 			{isProviderMode && (
-				<Stack gap={10}>
+				<Stack className={styles.providerGroups} gap={10}>
 					<ProviderGroup data={data} groupKey="own" />
 					{data.importedProviderGroups.map((group) => (
 						<ProviderGroup

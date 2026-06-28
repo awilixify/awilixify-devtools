@@ -7,15 +7,19 @@ import { DevtoolsHttpInitializer } from "./devtools-http.initializer.js";
 import { DevtoolsProcessor } from "./devtools-processor.js";
 import { DevtoolsServer } from "./devtools-server.js";
 import {
+	ClearTracesCommandHandler,
+	DeleteTraceCommandHandler,
 	GetModuleDetailsQueryHandler,
 	GetModuleGraphQueryHandler,
 	GetProviderImpactQueryHandler,
 	GetProviderMethodsQueryHandler,
+	GetSettingsQueryHandler,
 	GetTraceQueryHandler,
 	GetTracesQueryHandler,
 	InvokeProviderCommandHandler,
 } from "./handlers/index.js";
 import { ModuleGraphCollector } from "./module-graph/collector.js";
+import { DecoratorScanner } from "./module-graph/decorator-scanner.js";
 import { ProviderImpactAnalyzer } from "./provider-impact/analyzer.js";
 import { Tracer } from "./trace/tracer.js";
 
@@ -24,12 +28,12 @@ type Options = {
 	port?: number;
 	/** URL of the real app to proxy non-devtools requests to (e.g., "http://localhost:3000") */
 	appUrl?: string;
-	ui?:
-		| false
-		| {
-				host?: string;
-				port?: number;
-		  };
+	/**
+	 * File where trace history is persisted so it survives restarts.
+	 * Relative paths resolve against the cwd. Set false to keep traces
+	 * in memory only. Defaults to ".awilixify-devtools/traces.json".
+	 */
+	traceHistoryFile?: string | false;
 };
 
 export type DevtoolsModuleDef = ModuleDef<{
@@ -38,6 +42,7 @@ export type DevtoolsModuleDef = ModuleDef<{
 		fastify: FastifyInstance;
 		graphCollector: ModuleGraphCollector;
 		providerImpactAnalyzer: ProviderImpactAnalyzer;
+		decoratorScanner: DecoratorScanner;
 		[AWILIXIFY_DEVTOOLS_PROCESSOR]: DevtoolsProcessor;
 		devtoolsServer: DevtoolsServer;
 		tracer: Tracer;
@@ -49,8 +54,13 @@ export type DevtoolsModuleDef = ModuleDef<{
 		GetTraceQueryHandler,
 		GetProviderMethodsQueryHandler,
 		GetProviderImpactQueryHandler,
+		GetSettingsQueryHandler,
 	];
-	commandHandlers: [InvokeProviderCommandHandler];
+	commandHandlers: [
+		ClearTracesCommandHandler,
+		DeleteTraceCommandHandler,
+		InvokeProviderCommandHandler,
+	];
 	initializers: {
 		http: typeof DevtoolsHttpInitializer;
 	};
@@ -72,6 +82,7 @@ export const DevtoolsModule = (options: Options = {}) => {
 			},
 			graphCollector: ModuleGraphCollector,
 			providerImpactAnalyzer: ProviderImpactAnalyzer,
+			decoratorScanner: DecoratorScanner,
 			tracer: Tracer,
 			[AWILIXIFY_DEVTOOLS_PROCESSOR]: {
 				useClass: DevtoolsProcessor,
@@ -88,8 +99,13 @@ export const DevtoolsModule = (options: Options = {}) => {
 			GetTraceQueryHandler,
 			GetProviderMethodsQueryHandler,
 			GetProviderImpactQueryHandler,
+			GetSettingsQueryHandler,
 		],
-		commandHandlers: [InvokeProviderCommandHandler],
+		commandHandlers: [
+			ClearTracesCommandHandler,
+			DeleteTraceCommandHandler,
+			InvokeProviderCommandHandler,
+		],
 		initializers: {
 			http: DevtoolsHttpInitializer,
 		},

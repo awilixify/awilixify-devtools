@@ -1,25 +1,72 @@
+import {
+	Badge,
+	Divider,
+	Group,
+	SegmentedControl,
+	Stack,
+	Text,
+} from "@mantine/core";
 import clsx from "clsx";
-import { Divider, Group, Stack, Text } from "@mantine/core";
+import { useGraphSettings } from "../GraphSettingsContext";
+import type {
+	GraphViewMode,
+	ModuleProviderGroupMemberKind,
+	ProviderFocusHighlight,
+	ProviderImpactStatus,
+} from "../types";
 import styles from "./GraphLegend.module.css";
+import {
+	getMemberKindColor,
+	getMemberKindLabel,
+} from "./ModuleNode/ProviderGroup";
+import { ProviderStatusMark } from "./ModuleNode/ProviderStatusDot";
+
+const MEMBER_KINDS: { kind: ModuleProviderGroupMemberKind; label: string }[] = [
+	{ kind: "interceptor", label: "Interceptor" },
+	{ kind: "initializer", label: "Initializer" },
+	{ kind: "middleware", label: "Middleware" },
+];
 
 const compactGap = "calc(var(--mantine-spacing-xs) / 2)";
 
 export function GraphLegend() {
+	const {
+		providerFocusHighlight,
+		setProviderFocusHighlight,
+		setViewMode,
+		viewMode,
+	} = useGraphSettings();
+
 	return (
 		<Stack gap="xs">
-			<Text c="dimmed" size="xs" fw={700} tt="uppercase">
-				Legend
-			</Text>
-
 			<Stack gap={compactGap}>
 				<Text c="dimmed" fw={700} size="xs">
 					Modules
 				</Text>
-				<LegendItem color="var(--graph-color-selected)" label="Selected" />
-				<LegendItem color="var(--graph-color-dependency)" label="Dependency" />
-				<LegendItem color="var(--graph-color-dependent)" label="Dependent" />
-				<LegendItem color="var(--graph-color-global)" label="Global" />
-				<LegendItem color="var(--graph-color-dynamic)" label="Dynamic group" />
+				<div className={styles.moduleLegendGrid}>
+					<LegendItem color="var(--graph-color-selected)" label="Selected" />
+					<LegendItem
+						color="var(--graph-color-dependency)"
+						label="Dependency"
+					/>
+					<LegendItem color="var(--graph-color-dependent)" label="Dependent" />
+					<LegendItem color="var(--graph-color-global)" label="Global" />
+					<LegendItem
+						color="var(--graph-color-dynamic)"
+						label="Dynamic group"
+					/>
+				</div>
+				<SegmentedControl
+					aria-label="Graph view mode"
+					data={[
+						{ label: "Dependencies", value: "dependencies" },
+						{ label: "Providers", value: "providers" },
+					]}
+					fullWidth
+					onChange={(value) => setViewMode(value as GraphViewMode)}
+					size="xs"
+					value={viewMode}
+				/>
 			</Stack>
 
 			<Divider />
@@ -29,83 +76,125 @@ export function GraphLegend() {
 					Provider focus
 				</Text>
 
+				<LegendItem color="var(--mantine-color-orange-2)" label="Selected" />
 				<LegendItem
-					background="var(--graph-color-provider-focus-selected)"
-					color="var(--mantine-color-orange-4)"
-					label="Selected"
-				/>
-				<LegendItem
-					background="var(--graph-color-provider-focus-same)"
-					color="var(--mantine-color-orange-3)"
+					color="var(--mantine-color-orange-1)"
 					label="Same provider"
 				/>
 				<LegendItem
-					background="var(--graph-color-provider-focus-dependant)"
-					color="var(--mantine-color-yellow-5)"
-					label="Depends on selected"
+					color="var(--mantine-color-yellow-2)"
+					label={
+						providerFocusHighlight === "dependencies"
+							? "Selected depends on"
+							: "Depends on selected"
+					}
+				/>
+				<SegmentedControl
+					aria-label="Provider focus highlight direction"
+					data={[
+						{ label: "Consumers", value: "dependants" },
+						{ label: "Dependencies", value: "dependencies" },
+					]}
+					fullWidth
+					onChange={(value) =>
+						setProviderFocusHighlight(value as ProviderFocusHighlight)
+					}
+					size="xs"
+					value={providerFocusHighlight}
 				/>
 			</Stack>
 
 			<Divider />
 
-			<Stack gap={compactGap}>
-				<Text c="dimmed" fw={700} size="xs">
-					Provider status
-				</Text>
+			<Group align="flex-start" gap="md" grow wrap="nowrap">
+				<Stack gap={compactGap}>
+					<Text c="dimmed" fw={700} size="xs">
+						Status
+					</Text>
 
-				<LegendItem
-					color="var(--graph-color-new-provider)"
-					label="New"
-					size="small"
-				/>
-				<LegendItem
-					color="var(--graph-color-deleted-provider)"
-					label="Deleted"
-					size="small"
-				/>
-				<LegendItem
-					color="var(--graph-color-changed-provider)"
-					label="Changed"
-					size="small"
-				/>
-				<LegendItem
-					color="var(--graph-color-affected-provider)"
-					label="Affected"
-					size="small"
-					variant="outline"
-				/>
-			</Stack>
+					<StatusLegendItem label="New" status="new" />
+					<StatusLegendItem label="Deleted" status="deleted" />
+					<StatusLegendItem label="Changed" status="changed" />
+					<StatusLegendItem label="Affected" status="affected" />
+				</Stack>
+
+				<Stack gap={compactGap}>
+					<Text c="dimmed" fw={700} size="xs">
+						Metadata
+					</Text>
+
+					<LegendItem
+						color="var(--mantine-color-teal-6)"
+						iconLabel="↗"
+						label="Exported"
+					/>
+					<LegendItem
+						color="var(--graph-color-scoped-provider)"
+						iconLabel="S"
+						label="Scoped"
+					/>
+					<LegendItem
+						color="var(--graph-color-transient-provider)"
+						iconLabel="T"
+						label="Transient"
+					/>
+					<LegendItem
+						color="var(--mantine-color-grape-6)"
+						iconLabel="F"
+						label="Factory"
+					/>
+					<LegendItem
+						color="var(--graph-color-eager-provider)"
+						iconLabel="E"
+						label="Eager"
+					/>
+				</Stack>
+			</Group>
 
 			<Divider />
 
 			<Stack gap={compactGap}>
 				<Text c="dimmed" fw={700} size="xs">
-					Provider metadata
+					Members
 				</Text>
 
-				<LegendItem
-					background="var(--mantine-color-gray-0)"
-					color="var(--mantine-color-gray-5)"
-					label="Exported"
-					variant="dashed"
-				/>
-				<LegendItem
-					color="var(--graph-color-scoped-provider)"
-					iconLabel="S"
-					label="Scoped"
-				/>
-				<LegendItem
-					color="var(--graph-color-transient-provider)"
-					iconLabel="T"
-					label="Transient"
-				/>
-				<LegendItem
-					color="var(--graph-color-eager-provider)"
-					iconLabel="E"
-					label="Eager"
-				/>
+				{MEMBER_KINDS.map(({ kind, label }) => (
+					<Group gap={compactGap} key={kind} wrap="nowrap">
+						<Badge
+							color={getMemberKindColor(kind)}
+							radius="sm"
+							size="xs"
+							tt="none"
+							variant="light"
+						>
+							{getMemberKindLabel(kind)}
+						</Badge>
+						<Text size="xs">{label}</Text>
+					</Group>
+				))}
+				<Group gap={compactGap} wrap="nowrap">
+					<Text c="grape" fw={700} size="xs" style={{ width: 18 }}>
+						@1
+					</Text>
+					<Text size="xs">Decorator count</Text>
+				</Group>
 			</Stack>
 		</Stack>
+	);
+}
+
+function StatusLegendItem({
+	label,
+	status,
+}: {
+	label: string;
+	status: ProviderImpactStatus;
+}) {
+	return (
+		<Group gap={compactGap} wrap="nowrap">
+			<ProviderStatusMark status={status} />
+			<Text size="xs">{label}</Text>
+		</Group>
 	);
 }
 

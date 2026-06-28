@@ -5,17 +5,26 @@
  * API for inspecting module graphs, traces, and provider impact
  * OpenAPI spec version: 1.0.0
  */
+import type { AvailableModuleFeature } from "./availableModuleFeature";
+import type { GetModuleDetailsResponseAvailableDecorators } from "./getModuleDetailsResponseAvailableDecorators";
+import type { ModuleGraphEntrypoint } from "./moduleGraphEntrypoint";
 import type { ModuleGraphNode } from "./moduleGraphNode";
 import type { ModuleGraphRoute } from "./moduleGraphRoute";
 
 export interface GetModuleDetailsResponse {
+	availableCommandPreHandlerDetails: AvailableModuleFeature[];
 	availableCommandPreHandlers: string[];
+	availableInitializerDetails: AvailableModuleFeature[];
 	availableInitializers: string[];
+	availableInterceptorDetails: AvailableModuleFeature[];
 	availableInterceptors: string[];
+	availableQueryPreHandlerDetails: AvailableModuleFeature[];
 	availableQueryPreHandlers: string[];
 	globalModules: string[];
 	importedModules: string[];
 	module: ModuleGraphNode;
+	entrypoints: ModuleGraphEntrypoint[];
 	routes: ModuleGraphRoute[];
 	usedByModules: string[];
+	availableDecorators: GetModuleDetailsResponseAvailableDecorators;
 }

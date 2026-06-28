@@ -4,6 +4,7 @@ import {
 	hasUseClass,
 	isCostructorProvider,
 	isEagerProvider,
+	isFactoryProvider,
 	type InternalModuleLike as M,
 } from "awilixify/devtools";
 import type { ModuleGraphNode } from "./types.js";
@@ -12,9 +13,13 @@ type ModuleGraphProviderMetadata = Pick<
 	ModuleGraphNode,
 	| "lifetimeTypes"
 	| "providerAllowCircular"
+	| "providerClassNames"
 	| "providerDependencies"
 	| "providerEager"
 	| "providerInitAfter"
+	| "providerIsClass"
+	| "providerIsFactory"
+	| "providerValues"
 	| "providers"
 >;
 
@@ -25,6 +30,10 @@ export class ModuleGraphProviderCollector {
 		return {
 			providers: Object.keys(providers),
 			providerAllowCircular: this.getProviderAllowCircular(providers),
+			providerIsClass: this.getProviderIsClass(providers),
+			providerIsFactory: this.getProviderIsFactory(providers),
+			providerClassNames: this.getProviderClassNames(providers),
+			providerValues: this.getProviderValues(providers),
 			providerDependencies: this.getProviderDependencies(providers),
 			providerEager: this.getProviderEager(providers),
 			providerInitAfter: this.getProviderInitAfter(providers),
@@ -44,6 +53,93 @@ export class ModuleGraphProviderCollector {
 				(provider as { allowCircular?: boolean })?.allowCircular === true,
 			]),
 		);
+	}
+
+	// Value/factory providers have no invocable prototype methods; consumers
+	// like the playground use this to offer only class-backed providers.
+	private getProviderIsClass(
+		providers: NonNullable<M["providers"]>,
+	): Record<string, boolean> {
+		return Object.fromEntries(
+			Object.entries(providers).map(([providerName, provider]) => [
+				providerName,
+				isCostructorProvider(provider) || hasUseClass(provider),
+			]),
+		);
+	}
+
+	// Factory providers ({ useFactory }) have neither a class name nor a static
+	// value, so the tooltip marks them explicitly rather than showing nothing.
+	private getProviderIsFactory(
+		providers: NonNullable<M["providers"]>,
+	): Record<string, boolean> {
+		return Object.fromEntries(
+			Object.entries(providers).map(([providerName, provider]) => [
+				providerName,
+				isFactoryProvider(provider),
+			]),
+		);
+	}
+
+	// Registration key -> implementation class name, for class-backed providers
+	// (bare constructor or { useClass }). Value/factory providers are omitted.
+	private getProviderClassNames(
+		providers: NonNullable<M["providers"]>,
+	): Record<string, string> {
+		const result: Record<string, string> = {};
+
+		for (const [name, provider] of Object.entries(providers)) {
+			if (isCostructorProvider(provider)) {
+				result[name] = provider.name;
+			} else if (hasUseClass(provider)) {
+				result[name] = provider.useClass.name;
+			}
+		}
+
+		return result;
+	}
+
+	// Registration key -> serialized value, for value providers only (primitives,
+	// plain objects, arrays). Class/factory/function providers are omitted since
+	// they have no static value to show.
+	private getProviderValues(
+		providers: NonNullable<M["providers"]>,
+	): Record<string, string> {
+		const result: Record<string, string> = {};
+
+		for (const [name, provider] of Object.entries(providers)) {
+			const value = this.extractProviderValue(provider);
+			if (value !== undefined) result[name] = value;
+		}
+
+		return result;
+	}
+
+	private extractProviderValue(provider: unknown): string | undefined {
+		switch (typeof provider) {
+			case "string":
+			case "number":
+			case "boolean":
+			case "bigint":
+			case "symbol":
+				return formatValueLiteral(provider);
+			case "object": {
+				if (provider === null) return "null";
+				// Exclude class/factory config objects and forward refs — not values.
+				if (
+					hasUseClass(provider) ||
+					"useFactory" in provider ||
+					"__forward_ref__" in provider
+				) {
+					return undefined;
+				}
+				return formatValueLiteral(provider);
+			}
+			default:
+				// Bare functions/constructors are class providers, surfaced via
+				// providerClassNames — not values.
+				return undefined;
+		}
 	}
 
 	private getProviderEager(
@@ -162,5 +258,71 @@ export class ModuleGraphProviderCollector {
 		if (!signatureName || /^[{[]/.test(signatureName)) return null;
 
 		return signatureName.match(/^[A-Za-z_$][\w$]*/)?.[0] ?? null;
+	}
+}
+
+// Render a value provider as a TS-style literal for a syntax-highlighted,
+// read-only preview: strings quoted, class/function entries shown as their bare
+// identifier name (so `{ CatsViewedQueueJob: CatsViewedQueueJob }` instead of
+// `{"CatsViewedQueueJob":"[Function]"}`), objects/arrays pretty-printed. Not
+// runtime-valid code — class refs are names only. No truncation by design.
+function formatValueLiteral(value: unknown): string {
+	const seen = new WeakSet<object>();
+
+	function fmt(val: unknown, indent: string): string {
+		switch (typeof val) {
+			case "string":
+				return `'${val.replace(/\\/g, "\\\\").replace(/'/g, "\\'")}'`;
+			case "number":
+			case "boolean":
+				return String(val);
+			case "bigint":
+				return `${val}n`;
+			case "symbol":
+				return val.toString();
+			case "undefined":
+				return "undefined";
+			case "function":
+				// A class/function used as a value — its bare identifier reads and
+				// highlights like a real reference.
+				return val.name || "(anonymous)";
+			case "object": {
+				if (val === null) return "null";
+				if (seen.has(val)) return "[Circular]";
+				seen.add(val);
+
+				const inner = `${indent}  `;
+				if (Array.isArray(val)) {
+					if (val.length === 0) return "[]";
+					const items = val.map((item) => `${inner}${fmt(item, inner)}`);
+					return `[\n${items.join(",\n")}\n${indent}]`;
+				}
+
+				// Class instances passed as value providers (e.g. a Kysely or
+				// ToadScheduler built outside the module) usually expose no enumerable
+				// own props — show the constructor name so `{}` becomes `Kysely {}`.
+				const ctor = (val as { constructor?: unknown }).constructor;
+				const className =
+					typeof ctor === "function" && ctor !== Object && ctor.name
+						? `${ctor.name} `
+						: "";
+
+				const entries = Object.entries(val as Record<string, unknown>);
+				if (entries.length === 0) return `${className}{}`;
+				const props = entries.map(([key, item]) => {
+					const label = /^[A-Za-z_$][\w$]*$/.test(key) ? key : `'${key}'`;
+					return `${inner}${label}: ${fmt(item, inner)}`;
+				});
+				return `${className}{\n${props.join(",\n")}\n${indent}}`;
+			}
+			default:
+				return String(val);
+		}
+	}
+
+	try {
+		return fmt(value, "");
+	} catch {
+		return String(value);
 	}
 }

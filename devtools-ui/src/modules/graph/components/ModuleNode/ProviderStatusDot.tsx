@@ -1,8 +1,11 @@
 import clsx from "clsx";
-import type { ProviderImpactStatus } from "@/api/model";
+import type { ProviderImpactStatus } from "../../types";
 import styles from "./ModuleNode.module.css";
+import { resolveProviderStatus, STATUS_GLYPH } from "./provider-status";
 
-export function ProviderStatusDot({
+// A colored glyph (+ ~ ! ×) — color plus shape, so status reads without relying
+// on color alone. On provider chips it's paired with a left diff-gutter bar.
+export function ProviderStatusMark({
 	added,
 	affected,
 	changed,
@@ -15,23 +18,17 @@ export function ProviderStatusDot({
 	deleted?: boolean;
 	status?: ProviderImpactStatus;
 }) {
-	const resolvedStatus =
-		status ??
-		(deleted
-			? "deleted"
-			: added
-				? "new"
-				: changed
-					? "changed"
-					: affected
-						? "affected"
-						: null);
+	const resolved =
+		status ?? resolveProviderStatus({ added, affected, changed, deleted });
 
-	if (!resolvedStatus) return null;
+	if (!resolved) return null;
 
 	return (
 		<span
-			className={clsx(styles.providerStatusDot, styles[resolvedStatus])}
-		/>
+			className={clsx(styles.providerStatusMark, styles[resolved])}
+			title={resolved}
+		>
+			{STATUS_GLYPH[resolved]}
+		</span>
 	);
 }

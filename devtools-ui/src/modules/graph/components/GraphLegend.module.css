@@ -3,12 +3,26 @@
 	top: var(--mantine-spacing-xs);
 	left: var(--mantine-spacing-xs);
 	z-index: 4;
+	pointer-events: auto;
+}
+
+.legendPanel {
 	width: 240px;
 	pointer-events: auto;
 }
 
+.legendPanel[data-collapsed="true"] {
+	width: auto;
+}
+
+.moduleLegendGrid {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+	gap: calc(var(--mantine-spacing-xs) / 2) var(--mantine-spacing-xs);
+}
+
 .swatch {
-	border: 2px solid currentColor;
+	border: 0;
 	border-radius: 999px;
 	background: currentColor;
 	font-size: var(--mantine-font-size-xs);
@@ -17,6 +31,11 @@
 	justify-content: center;
 	font-weight: 700;
 	color: var(--mantine-color-white);
+}
+
+.outline,
+.dashed {
+	border: 2px solid currentColor;
 }
 
 .small {

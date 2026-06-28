@@ -18,37 +18,86 @@ export class InvokeProviderCommandHandler
 		Response
 	>;
 
-	constructor(private readonly graphCollector: Deps["graphCollector"]) {}
+	constructor(
+		private readonly graphCollector: Deps["graphCollector"],
+		private readonly tracer: Deps["tracer"],
+	) {}
 
 	async executor(payload: Payload): Promise<Response> {
 		const consoleEntries: ConsoleEntry[] = [];
 		const restoreConsole = this.captureConsole(consoleEntries);
+		let traceId: string | undefined;
+		let response: Omit<Response, "traceId">;
 
 		try {
 			const provider = this.resolveProvider(
 				payload.scopeModuleId,
 				payload.providerKey,
 			);
+			const className = this.getProviderClassName(provider);
+			const moduleName =
+				this.graphCollector.getModule(payload.scopeModuleId)?.name ??
+				payload.scopeModuleId;
+			const traceUrl = `${moduleName}.${className}.${payload.methodName}`;
 
-			const result = await this.resolveMethod(
-				provider,
-				payload.methodName,
-			).apply(provider, payload.args);
-
-			return {
+			const result = await this.tracer.runInControllerTrace({
+				moduleName,
+				className,
+				registrationKey: payload.providerKey,
+				methodName: payload.methodName,
+				args: [
+					{
+						method: payload.traceMethod,
+						url: traceUrl,
+						routeOptions: { url: traceUrl },
+						body: {
+							args: payload.args,
+							methodName: payload.methodName,
+							providerKey: payload.providerKey,
+							scopeModuleId: payload.scopeModuleId,
+						},
+					},
+				],
+				onTraceCreated: (createdTraceId: string) => {
+					traceId = createdTraceId;
+				},
+				callback: () =>
+					this.resolveMethod(provider, payload.methodName).apply(
+						provider,
+						payload.args,
+					),
+			});
+			response = {
 				ok: true,
 				result: this.toJsonSafeValue(result),
 				console: consoleEntries,
 			};
 		} catch (error) {
-			return {
+			response = {
 				ok: false,
-				error: this.serializeError(error),
+				invokeError: this.serializeError(error),
 				console: consoleEntries,
 			};
 		} finally {
 			restoreConsole();
 		}
+
+		if (!traceId) {
+			throw new Error(
+				"Provider invocation completed without creating a trace.",
+			);
+		}
+
+		return {
+			...response,
+			traceId,
+		};
+	}
+
+	private getProviderClassName(provider: ProviderInstance): string {
+		if (typeof provider === "function") return provider.name || "anonymous";
+
+		return provider.constructor?.name || "anonymous";
 	}
 
 	private resolveProvider(
@@ -61,13 +110,18 @@ export class InvokeProviderCommandHandler
 			throw new Error(`Module scope "${scopeModuleId}" was not found.`);
 		}
 
-		if (!scope.registrations[providerKey]) {
+		const registrationKey = scope.registrations[providerKey]
+			? providerKey
+			: (this.findHandlerRegistrationSymbol(scope, providerKey) ??
+				this.findControllerRegistrationSymbol(scope, providerKey));
+
+		if (!registrationKey) {
 			throw new Error(
 				`Provider "${providerKey}" is not available in module scope "${scopeModuleId}".`,
 			);
 		}
 
-		const provider = scope.resolve(providerKey);
+		const provider = scope.resolve(registrationKey);
 
 		if (
 			provider === null ||
@@ -79,6 +133,31 @@ export class InvokeProviderCommandHandler
 		}
 
 		return provider;
+	}
+
+	// Query/command handlers are registered under Symbol("<key>_<ClassName>")
+	// rather than their class name, so class-name lookups scan symbol
+	// registrations by description suffix.
+	private findHandlerRegistrationSymbol(
+		scope: NonNullable<ReturnType<Deps["graphCollector"]["getModuleScope"]>>,
+		providerKey: string,
+	): symbol | null {
+		return (
+			Object.getOwnPropertySymbols(scope.registrations).find((symbol) =>
+				symbol.description?.endsWith(`_${providerKey}`),
+			) ?? null
+		);
+	}
+
+	private findControllerRegistrationSymbol(
+		scope: NonNullable<ReturnType<Deps["graphCollector"]["getModuleScope"]>>,
+		providerKey: string,
+	): symbol | null {
+		return (
+			Object.getOwnPropertySymbols(scope.registrations).find(
+				(symbol) => symbol.description === `controller_${providerKey}`,
+			) ?? null
+		);
 	}
 
 	private resolveMethod(
@@ -136,7 +215,7 @@ export class InvokeProviderCommandHandler
 		};
 	}
 
-	private serializeError(error: unknown): Response["error"] {
+	private serializeError(error: unknown): Response["invokeError"] {
 		if (error instanceof Error) {
 			return {
 				name: error.name,

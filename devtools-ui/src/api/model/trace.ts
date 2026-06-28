@@ -6,6 +6,7 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { ConsoleEntry } from "./consoleEntry";
+import type { TraceErrorKind } from "./traceErrorKind";
 import type { TraceErrorProperty } from "./traceErrorProperty";
 import type { TraceRequest } from "./traceRequest";
 import type { TraceSpan } from "./traceSpan";
@@ -22,6 +23,7 @@ export interface Trace {
 	response: unknown;
 	/** @nullable */
 	error: TraceErrorProperty;
+	errorKind?: TraceErrorKind;
 	startedAt: number;
 	durationMs: number;
 	status: TraceSpanStatus;

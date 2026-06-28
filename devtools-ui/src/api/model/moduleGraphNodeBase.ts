@@ -6,11 +6,26 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { DynamicModuleInfo } from "./dynamicModuleInfo";
+import type { ModuleGraphEntrypoint } from "./moduleGraphEntrypoint";
+import type { ModuleGraphNodeBaseCommandHandlerKeys } from "./moduleGraphNodeBaseCommandHandlerKeys";
+import type { ModuleGraphNodeBaseCommandPreHandlerClassNames } from "./moduleGraphNodeBaseCommandPreHandlerClassNames";
+import type { ModuleGraphNodeBaseCommandPreHandlerLifetimeTypes } from "./moduleGraphNodeBaseCommandPreHandlerLifetimeTypes";
+import type { ModuleGraphNodeBaseControllerLifetimeTypes } from "./moduleGraphNodeBaseControllerLifetimeTypes";
+import type { ModuleGraphNodeBaseInitializerClassNames } from "./moduleGraphNodeBaseInitializerClassNames";
+import type { ModuleGraphNodeBaseInterceptorClassNames } from "./moduleGraphNodeBaseInterceptorClassNames";
+import type { ModuleGraphNodeBaseInterceptorDecoratorNames } from "./moduleGraphNodeBaseInterceptorDecoratorNames";
 import type { ModuleGraphNodeBaseLifetimeTypes } from "./moduleGraphNodeBaseLifetimeTypes";
 import type { ModuleGraphNodeBaseProviderAllowCircular } from "./moduleGraphNodeBaseProviderAllowCircular";
+import type { ModuleGraphNodeBaseProviderClassNames } from "./moduleGraphNodeBaseProviderClassNames";
 import type { ModuleGraphNodeBaseProviderDependencies } from "./moduleGraphNodeBaseProviderDependencies";
 import type { ModuleGraphNodeBaseProviderEager } from "./moduleGraphNodeBaseProviderEager";
 import type { ModuleGraphNodeBaseProviderInitAfter } from "./moduleGraphNodeBaseProviderInitAfter";
+import type { ModuleGraphNodeBaseProviderIsClass } from "./moduleGraphNodeBaseProviderIsClass";
+import type { ModuleGraphNodeBaseProviderIsFactory } from "./moduleGraphNodeBaseProviderIsFactory";
+import type { ModuleGraphNodeBaseProviderValues } from "./moduleGraphNodeBaseProviderValues";
+import type { ModuleGraphNodeBaseQueryHandlerKeys } from "./moduleGraphNodeBaseQueryHandlerKeys";
+import type { ModuleGraphNodeBaseQueryPreHandlerClassNames } from "./moduleGraphNodeBaseQueryPreHandlerClassNames";
+import type { ModuleGraphNodeBaseQueryPreHandlerLifetimeTypes } from "./moduleGraphNodeBaseQueryPreHandlerLifetimeTypes";
 import type { ModuleGraphNodeKind } from "./moduleGraphNodeKind";
 
 export interface ModuleGraphNodeBase {
@@ -26,20 +41,35 @@ export interface ModuleGraphNodeBase {
 	dependentCount: number;
 	providers: string[];
 	providerAllowCircular: ModuleGraphNodeBaseProviderAllowCircular;
+	providerIsClass: ModuleGraphNodeBaseProviderIsClass;
+	providerIsFactory: ModuleGraphNodeBaseProviderIsFactory;
+	providerClassNames: ModuleGraphNodeBaseProviderClassNames;
+	providerValues: ModuleGraphNodeBaseProviderValues;
 	providerDependencies: ModuleGraphNodeBaseProviderDependencies;
 	providerEager: ModuleGraphNodeBaseProviderEager;
 	providerInitAfter: ModuleGraphNodeBaseProviderInitAfter;
 	lifetimeTypes: ModuleGraphNodeBaseLifetimeTypes;
 	exports: string[];
 	controllers: string[];
+	controllerLifetimeTypes: ModuleGraphNodeBaseControllerLifetimeTypes;
 	queryHandlers: string[];
 	commandHandlers: string[];
+	queryHandlerKeys: ModuleGraphNodeBaseQueryHandlerKeys;
+	commandHandlerKeys: ModuleGraphNodeBaseCommandHandlerKeys;
 	queryPreHandlers: string[];
 	queryPreHandlerExports: string[];
 	commandPreHandlers: string[];
 	commandPreHandlerExports: string[];
+	queryPreHandlerClassNames: ModuleGraphNodeBaseQueryPreHandlerClassNames;
+	commandPreHandlerClassNames: ModuleGraphNodeBaseCommandPreHandlerClassNames;
+	queryPreHandlerLifetimeTypes: ModuleGraphNodeBaseQueryPreHandlerLifetimeTypes;
+	commandPreHandlerLifetimeTypes: ModuleGraphNodeBaseCommandPreHandlerLifetimeTypes;
 	interceptors: string[];
 	interceptorExports: string[];
+	interceptorClassNames: ModuleGraphNodeBaseInterceptorClassNames;
+	interceptorDecoratorNames: ModuleGraphNodeBaseInterceptorDecoratorNames;
 	initializers: string[];
 	initializerExports: string[];
+	initializerClassNames: ModuleGraphNodeBaseInitializerClassNames;
+	entrypoints: ModuleGraphEntrypoint[];
 }

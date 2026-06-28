@@ -6,6 +6,7 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { ConsoleEntry } from "./consoleEntry";
+import type { TraceErrorKind } from "./traceErrorKind";
 import type { TraceSpanError } from "./traceSpanError";
 import type { TraceSpanKind } from "./traceSpanKind";
 import type { TraceSpanStatus } from "./traceSpanStatus";
@@ -20,15 +21,17 @@ export interface TraceSpan {
 	moduleId: string | null;
 	/** @nullable */
 	moduleName: string | null;
-	/** @nullable */
-	providerKey: string | null;
+	className: string;
+	registrationKey: string;
 	methodName: string;
 	args: unknown[];
 	result: unknown;
 	/** @nullable */
 	error: TraceSpanError;
+	errorKind?: TraceErrorKind;
 	startedAt: number;
 	durationMs: number;
+	selfDurationMs: number;
 	status: TraceSpanStatus;
 	console: ConsoleEntry[];
 }

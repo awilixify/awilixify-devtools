@@ -11,6 +11,7 @@ import type { InvokeError } from "./invokeError";
 export interface InvokeProviderResponse {
 	ok: boolean;
 	result?: unknown;
-	error?: InvokeError;
+	invokeError?: InvokeError;
 	console: ConsoleEntry[];
+	traceId: string;
 }

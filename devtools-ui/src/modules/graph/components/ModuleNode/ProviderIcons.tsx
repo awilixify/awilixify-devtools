@@ -1,4 +1,5 @@
 import clsx from "clsx";
+import type { CSSProperties } from "react";
 import type { LifetimeType } from "@/api/model";
 import styles from "./ModuleNode.module.css";
 
@@ -13,6 +14,20 @@ export function AllowCircularIcon() {
 	);
 }
 
+export function ExportedProviderIcon({ style }: { style?: CSSProperties }) {
+	return (
+		<span
+			aria-label="Exported provider"
+			className={styles.exportedProviderIcon}
+			role="img"
+			style={style}
+			title="Exported provider"
+		>
+			↗
+		</span>
+	);
+}
+
 export function EagerProviderIcon() {
 	return (
 		<span
@@ -22,6 +37,19 @@ export function EagerProviderIcon() {
 			title="Eager provider"
 		>
 			E
+		</span>
+	);
+}
+
+export function FactoryProviderIcon() {
+	return (
+		<span
+			aria-label="Factory provider"
+			className={styles.providerFactoryIcon}
+			role="img"
+			title="Factory provider (useFactory)"
+		>
+			F
 		</span>
 	);
 }

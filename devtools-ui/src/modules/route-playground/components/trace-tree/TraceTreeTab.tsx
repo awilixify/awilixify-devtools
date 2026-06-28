@@ -15,15 +15,19 @@ import {
 	ReactFlow,
 } from "@xyflow/react";
 import { useMemo } from "react";
+import { useGetDevtoolsGraphSuspense } from "@/api/graph/graph";
 import type {
 	GetGraphResponse,
 	Trace,
 	TraceSpan,
-	TraceSpanStatus,
 	TraceSpanKind,
+	TraceSpanStatus,
 } from "@/api/model";
+import {
+	getErrorBadgeLabel,
+	getOriginErrorSpanIds,
+} from "../trace-list/errorOrigin";
 import { getSpanColor } from "./traceFormatting";
-import { useGetDevtoolsGraphSuspense } from "@/api/graph/graph";
 
 type TraceTreeTabProps = {
 	trace: Trace;
@@ -34,7 +38,8 @@ type TraceCallTreeNode = {
 	depth: number;
 	moduleName: string;
 	order: number;
-	providerKey: string;
+	className: string;
+	isOriginError: boolean;
 	span: TraceSpan;
 };
 
@@ -45,8 +50,10 @@ type MethodNodeData = Record<string, unknown> & {
 	methodName: string;
 	moduleName: string;
 	order: number;
-	providerKey: string;
+	className: string;
 	status: TraceSpanStatus;
+	errorTone?: "origin" | "propagated";
+	errorKind?: TraceSpan["errorKind"];
 };
 
 type CallEdgeData = Record<string, unknown> & {
@@ -79,7 +86,7 @@ export function TraceTreeTab({ trace }: TraceTreeTabProps) {
 
 	if (callTree.roots.length === 0) {
 		return (
-			<Paper withBorder radius="sm" p="md">
+			<Paper>
 				<Text c="dimmed" size="sm">
 					No method calls were found for this trace.
 				</Text>
@@ -98,8 +105,7 @@ export function TraceTreeTab({ trace }: TraceTreeTabProps) {
 				</Badge>
 			</Group>
 			<Paper
-				withBorder
-				radius="sm"
+				p={0}
 				style={{
 					height: 620,
 					overflow: "hidden",
@@ -175,11 +181,20 @@ function CallEdge({
 function MethodCallNode({ data }: NodeProps<MethodGraphNode>) {
 	return (
 		<Paper
-			withBorder
-			radius="sm"
 			p={8}
 			style={{
-				background: data.status === "error" ? "#fff5f5" : "white",
+				background:
+					data.errorTone === "origin"
+						? "#fff5f5"
+						: data.errorTone === "propagated"
+							? "#fff9db"
+							: "white",
+				borderColor:
+					data.errorTone === "origin"
+						? "var(--mantine-color-red-4)"
+						: data.errorTone === "propagated"
+							? "var(--mantine-color-orange-3)"
+							: undefined,
 				height: "100%",
 				width: "100%",
 			}}
@@ -192,6 +207,15 @@ function MethodCallNode({ data }: NodeProps<MethodGraphNode>) {
 				<Badge color={getSpanColor(data.kind)} size="xs" variant="light">
 					{data.kind}
 				</Badge>
+				{data.errorTone && (
+					<Badge
+						color={data.errorTone === "origin" ? "red" : "orange"}
+						size="xs"
+						variant={data.errorTone === "origin" ? "filled" : "light"}
+					>
+						{getErrorBadgeLabel(data.errorTone, data.errorKind)}
+					</Badge>
+				)}
 				<Text c="dimmed" ml="auto" size="xs">
 					{Math.round(data.durationMs)} ms
 				</Text>
@@ -201,7 +225,7 @@ function MethodCallNode({ data }: NodeProps<MethodGraphNode>) {
 			</Text>
 			<Group gap={6} mt={2} wrap="nowrap">
 				<Text c="dimmed" lineClamp={1} size="xs">
-					{data.moduleName} / {data.providerKey}
+					{data.moduleName} / {data.className}
 				</Text>
 				{data.childCount > 0 && (
 					<Text c="dimmed" size="xs">
@@ -259,8 +283,15 @@ function buildFlowGraph(roots: TraceCallTreeNode[]): {
 				methodName: node.span.methodName ?? node.span.label,
 				moduleName: node.moduleName,
 				order: node.order,
-				providerKey: node.providerKey,
+				className: node.className,
 				status: node.span.status,
+				errorTone:
+					node.span.status === "error"
+						? node.isOriginError
+							? "origin"
+							: "propagated"
+						: undefined,
+				errorKind: node.span.errorKind,
 			},
 			style: {
 				height: 86,
@@ -326,10 +357,9 @@ function buildTraceCallTree(graph: GetGraphResponse, trace: Trace) {
 	const bySpanId = new Map<string, TraceCallTreeNode>();
 	const roots: TraceCallTreeNode[] = [];
 	const touchedProviders = new Set<string>();
+	const originErrorSpanIds = getOriginErrorSpanIds(trace.spans);
 
 	trace.spans.forEach((span, index) => {
-		if (!span.providerKey) return;
-
 		const moduleId =
 			span.moduleId ??
 			(span.moduleName ? moduleIdByName.get(span.moduleName) : undefined) ??
@@ -338,13 +368,14 @@ function buildTraceCallTree(graph: GetGraphResponse, trace: Trace) {
 		const moduleName =
 			moduleNameById.get(moduleId) ?? span.moduleName ?? String(moduleId);
 
-		touchedProviders.add(`${moduleId}:${span.providerKey}`);
+		touchedProviders.add(`${moduleId}:${span.registrationKey}`);
 		bySpanId.set(span.id, {
 			children: [],
 			depth: 0,
 			moduleName,
 			order: index + 1,
-			providerKey: span.providerKey,
+			className: span.className,
+			isOriginError: originErrorSpanIds.has(span.id),
 			span,
 		});
 	});

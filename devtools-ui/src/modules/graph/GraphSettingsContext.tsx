@@ -9,19 +9,33 @@ import {
 	useState,
 } from "react";
 import type { GraphRouteSearch } from "../app/router";
-import type { GraphViewMode, ProviderFocusInput } from "./types";
+import type {
+	GraphViewMode,
+	ProviderFocusHighlight,
+	ProviderFocusInput,
+} from "./types";
+
+export type CenterModuleRequest = { key: string; seq: number };
 
 type GraphSettings = {
+	centerModuleRequest: CenterModuleRequest | null;
 	groupDynamicModules: boolean;
 	impactOnly: boolean;
 	providerFocus: ProviderFocusInput;
+	providerFocusHighlight: ProviderFocusHighlight;
+	requestCenterModule: (moduleKey: string) => void;
 	searchInput: string;
 	searchQuery: string;
+	// Incremented when the user submits the search (Enter) so the graph can
+	// select the best-matching module.
+	searchSubmitSeq: number;
+	submitSearch: () => void;
 	selectedModuleId: string | null;
 	selectedModuleAvailable: boolean;
 	setGroupDynamicModules: (checked: boolean) => void;
 	setImpactOnly: (checked: boolean) => void;
 	setProviderFocus: (focus: ProviderFocusInput) => void;
+	setProviderFocusHighlight: (highlight: ProviderFocusHighlight) => void;
 	setSearchInput: (query: string) => void;
 	setSelectedModuleId: (moduleId: string | null) => void;
 	setSelectedModuleAvailable: (available: boolean) => void;
@@ -37,6 +51,7 @@ type PersistedGraphSettings = {
 	groupDynamicModules: boolean;
 	impactOnly: boolean;
 	providerFocus: ProviderFocusInput;
+	providerFocusHighlight: ProviderFocusHighlight;
 	searchQuery: string;
 	selectedModuleId: string;
 	showGlobalEdges: boolean;
@@ -48,6 +63,7 @@ const defaultSettings: PersistedGraphSettings = {
 	groupDynamicModules: false,
 	impactOnly: false,
 	providerFocus: null,
+	providerFocusHighlight: "dependants",
 	searchQuery: "",
 	selectedModuleId: "",
 	showGlobalEdges: false,
@@ -60,6 +76,7 @@ const queryParamNames = {
 	impactOnly: "impactOnly",
 	providerFocusProvider: "focusProvider",
 	providerFocusOccurrence: "focusOccurrence",
+	providerFocusHighlight: "focusHighlight",
 	searchQuery: "q",
 	selectedModuleId: "selectedModule",
 	showGlobalEdges: "globals",
@@ -83,12 +100,29 @@ export function GraphSettingsProvider({ children }: { children: ReactNode }) {
 	const [providerFocus, setProviderFocus] = useState<ProviderFocusInput>(
 		initialSettings.providerFocus,
 	);
+	const [providerFocusHighlight, setProviderFocusHighlight] =
+		useState<ProviderFocusHighlight>(initialSettings.providerFocusHighlight);
 	const [searchInput, setSearchInput] = useState(initialSettings.searchQuery);
 	const [searchQuery, setSearchQuery] = useState(initialSettings.searchQuery);
 	const [selectedModuleId, setSelectedModuleIdState] = useState<string | null>(
 		initialSettings.selectedModuleId || null,
 	);
 	const [selectedModuleAvailable, setSelectedModuleAvailable] = useState(false);
+	const [centerModuleRequest, setCenterModuleRequest] =
+		useState<CenterModuleRequest | null>(null);
+	// A monotonic seq lets the graph re-center on repeat clicks of the same
+	// module. Centering only moves the camera — it never changes the selection.
+	const requestCenterModule = useCallback((moduleKey: string) => {
+		setCenterModuleRequest((previous) => ({
+			key: moduleKey,
+			seq: (previous?.seq ?? 0) + 1,
+		}));
+	}, []);
+	const [searchSubmitSeq, setSearchSubmitSeq] = useState(0);
+	const submitSearch = useCallback(
+		() => setSearchSubmitSeq((seq) => seq + 1),
+		[],
+	);
 	const [showGlobalEdges, setShowGlobalEdges] = useState(
 		initialSettings.showGlobalEdges,
 	);
@@ -117,6 +151,7 @@ export function GraphSettingsProvider({ children }: { children: ReactNode }) {
 				groupDynamicModules,
 				impactOnly,
 				providerFocus,
+				providerFocusHighlight,
 				searchQuery,
 				selectedModuleId: selectedModuleId ?? "",
 				showGlobalEdges,
@@ -129,6 +164,7 @@ export function GraphSettingsProvider({ children }: { children: ReactNode }) {
 		impactOnly,
 		navigate,
 		providerFocus,
+		providerFocusHighlight,
 		searchQuery,
 		selectedModuleId,
 		showGlobalEdges,
@@ -138,16 +174,22 @@ export function GraphSettingsProvider({ children }: { children: ReactNode }) {
 
 	const value = useMemo<GraphSettings>(
 		() => ({
+			centerModuleRequest,
 			groupDynamicModules,
 			impactOnly,
 			providerFocus,
+			providerFocusHighlight,
+			requestCenterModule,
 			searchInput,
 			searchQuery,
+			searchSubmitSeq,
+			submitSearch,
 			selectedModuleId,
 			selectedModuleAvailable,
 			setGroupDynamicModules,
 			setImpactOnly,
 			setProviderFocus,
+			setProviderFocusHighlight,
 			setSearchInput,
 			setSelectedModuleId,
 			setSelectedModuleAvailable,
@@ -159,11 +201,16 @@ export function GraphSettingsProvider({ children }: { children: ReactNode }) {
 			viewMode,
 		}),
 		[
+			centerModuleRequest,
 			groupDynamicModules,
 			impactOnly,
 			providerFocus,
+			providerFocusHighlight,
+			requestCenterModule,
 			searchInput,
 			searchQuery,
+			searchSubmitSeq,
+			submitSearch,
 			selectedModuleId,
 			selectedModuleAvailable,
 			setSelectedModuleId,
@@ -207,6 +254,9 @@ function readSettingsFromSearch(
 			focusProvider && focusOccurrence
 				? { provider: focusProvider, occurrenceId: focusOccurrence }
 				: null,
+		providerFocusHighlight:
+			search[queryParamNames.providerFocusHighlight] ??
+			defaultSettings.providerFocusHighlight,
 		searchQuery: search[queryParamNames.searchQuery] ?? "",
 		selectedModuleId:
 			search[queryParamNames.selectedModuleId] ??
@@ -236,6 +286,10 @@ function writeSettingsToSearch(
 		[queryParamNames.providerFocusProvider]: settings.providerFocus?.provider,
 		[queryParamNames.providerFocusOccurrence]:
 			settings.providerFocus?.occurrenceId,
+		[queryParamNames.providerFocusHighlight]:
+			settings.providerFocusHighlight === defaultSettings.providerFocusHighlight
+				? undefined
+				: settings.providerFocusHighlight,
 		[queryParamNames.searchQuery]:
 			settings.searchQuery.trim() === defaultSettings.searchQuery
 				? undefined

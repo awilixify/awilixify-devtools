@@ -24,8 +24,10 @@ export class ResponseSanitizer {
 		const requestObject = request as {
 			body?: unknown;
 			headers?: unknown;
+			host?: unknown;
 			method?: unknown;
 			params?: unknown;
+			protocol?: unknown;
 			query?: unknown;
 			routeOptions?: {
 				url?: unknown;
@@ -38,6 +40,15 @@ export class ResponseSanitizer {
 			return { method: "INVOKE" };
 		}
 
+		const url =
+			typeof requestObject.url === "string" ? requestObject.url : undefined;
+		const fullUrl =
+			url &&
+			typeof requestObject.protocol === "string" &&
+			typeof requestObject.host === "string"
+				? `${requestObject.protocol}://${requestObject.host}${url}`
+				: url;
+
 		return {
 			method: requestObject.method,
 			path:
@@ -45,11 +56,8 @@ export class ResponseSanitizer {
 					? requestObject.routeOptions.url
 					: typeof requestObject.routerPath === "string"
 						? requestObject.routerPath
-						: typeof requestObject.url === "string"
-							? requestObject.url
-							: undefined,
-			url:
-				typeof requestObject.url === "string" ? requestObject.url : undefined,
+						: url,
+			url: fullUrl,
 			request: {
 				body: requestObject.body,
 				headers: requestObject.headers,
@@ -120,6 +128,7 @@ export class ResponseSanitizer {
 
 		return Object.fromEntries(
 			Object.entries(value as Record<string, unknown>)
+				.filter(([key]) => key !== "raw" && key !== "log")
 				.slice(0, MAX_OBJECT_KEYS)
 				.map(([key, entryValue]) => [
 					key,

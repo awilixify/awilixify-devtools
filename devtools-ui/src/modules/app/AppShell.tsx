@@ -40,21 +40,9 @@ export function AppShell() {
 								<GraphIcon />
 							</ActionIcon>
 						</Tooltip>
-						<Tooltip label="Provider playground" position="right" withArrow>
+						<Tooltip label="Playground" position="right" withArrow>
 							<ActionIcon
-								aria-label="Provider playground"
-								color={pathname === "/playground" ? "teal" : "gray"}
-								component={Link}
-								size="lg"
-								to="/playground"
-								variant={pathname === "/playground" ? "light" : "subtle"}
-							>
-								<ProvidersIcon />
-							</ActionIcon>
-						</Tooltip>
-						<Tooltip label="Route playground" position="right" withArrow>
-							<ActionIcon
-								aria-label="Route playground"
+								aria-label="Playground"
 								color={pathname === "/routes" ? "teal" : "gray"}
 								component={Link}
 								size="lg"
@@ -93,27 +81,6 @@ function GraphIcon() {
 			<circle cx="12" cy="18" r="3" />
 			<path d="M8.7 7.4 10.8 15" />
 			<path d="m15.3 7.4-2.1 7.6" />
-		</svg>
-	);
-}
-
-function ProvidersIcon() {
-	return (
-		<svg
-			aria-hidden="true"
-			fill="none"
-			height="20"
-			stroke="currentColor"
-			strokeLinecap="round"
-			strokeLinejoin="round"
-			strokeWidth="2"
-			viewBox="0 0 24 24"
-			width="20"
-		>
-			<circle cx="7" cy="7" r="3" />
-			<circle cx="17" cy="17" r="3" />
-			<path d="M10 7h4a3 3 0 0 1 3 3v4" />
-			<path d="M7 10v4a3 3 0 0 0 3 3h4" />
 		</svg>
 	);
 }

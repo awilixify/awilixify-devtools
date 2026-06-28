@@ -1,5 +1,4 @@
 import {
-	ActionIcon,
 	Badge,
 	Center,
 	Group,
@@ -8,49 +7,57 @@ import {
 	SegmentedControl,
 	Stack,
 	Text,
-	Tooltip,
 } from "@mantine/core";
 import { Suspense } from "react";
 import { useGetDevtoolsTraces } from "@/api/traces/traces";
-import { getMethodColor } from "../http-method-color";
-import { useRoutePlaygroundSettings } from "../RoutePlaygroundSettingsContext";
+import { getMethodColor, getStatusCodeColor } from "../http-method-color";
 import {
-	type RoutePlaygroundResponse,
+	getTraceKindLabel,
+	getTraceOutcome,
+	isHttpTrace,
+	isMiddlewareTrace,
+} from "../trace-presentation";
+import {
 	type RoutePlaygroundViewMode,
 	RoutePlaygroundViewModes,
-	viewModeOptions,
-} from "../types";
+	useRoutePlaygroundSettings,
+} from "../use-route-playground-settings";
+import { isSyntheticTrace } from "./invocation-paper/use-invocation-trace";
 import styles from "./TraceDetailsPaper.module.css";
 import { TraceResponseTab } from "./TraceResponseTab";
 import { TraceListTab } from "./trace-list/TraceListTab";
 import { TraceTreeTab } from "./trace-tree/TraceTreeTab";
+import { getSpanColor } from "./trace-tree/traceFormatting";
 
-type TraceDetailsPaperProps = {
-	response: RoutePlaygroundResponse | null;
-	noTraceWarning: boolean;
-};
+export const viewModeOptions: {
+	label: string;
+	value: RoutePlaygroundViewMode;
+}[] = [
+	{ label: "Trace", value: RoutePlaygroundViewModes.trace },
+	{ label: "Graph", value: RoutePlaygroundViewModes.graph },
+	{ label: "Response", value: RoutePlaygroundViewModes.response },
+];
 
-export function TraceDetailsPaper({
-	response,
-	noTraceWarning,
-}: TraceDetailsPaperProps) {
+export function TraceDetailsPaper() {
 	const { viewMode, setViewMode, selectedTraceId } =
 		useRoutePlaygroundSettings();
 	const { data: traces = [] } = useGetDevtoolsTraces();
 
 	const selectedTrace = traces.find((trace) => trace.id === selectedTraceId);
+	const synthetic = selectedTrace ? isSyntheticTrace(selectedTrace) : false;
 
-	const disabledTabs = noTraceWarning && !selectedTrace;
+	const effectiveViewMode = synthetic
+		? RoutePlaygroundViewModes.response
+		: viewMode;
 	const segmentedControlData = viewModeOptions.map((option) => ({
 		...option,
-		disabled:
-			disabledTabs && option.value !== RoutePlaygroundViewModes.response,
+		disabled: synthetic && option.value !== RoutePlaygroundViewModes.response,
 	}));
 
 	return (
-		<Paper withBorder radius="sm" p="md" className={styles.panel}>
+		<Paper className={styles.panel}>
 			<Stack gap="md" className={styles.content}>
-				{(selectedTrace || noTraceWarning) && (
+				{selectedTrace && (
 					<Group gap={4}>
 						<SegmentedControl
 							data={segmentedControlData}
@@ -58,7 +65,7 @@ export function TraceDetailsPaper({
 								setViewMode(value as RoutePlaygroundViewMode)
 							}
 							size="xs"
-							value={viewMode}
+							value={effectiveViewMode}
 						/>
 					</Group>
 				)}
@@ -67,49 +74,62 @@ export function TraceDetailsPaper({
 					<Stack gap="sm" className={styles.traceContent}>
 						<Group justify="space-between">
 							<Group gap="xs">
-								<Badge color={getMethodColor(selectedTrace.method)}>
-									{selectedTrace.method}
-								</Badge>
+								{isHttpTrace(selectedTrace) ? (
+									<Badge color={getMethodColor(selectedTrace.method)}>
+										{selectedTrace.method}
+									</Badge>
+								) : (
+									<Badge
+										color={
+											isMiddlewareTrace(selectedTrace)
+												? getSpanColor("prehandler")
+												: getMethodColor(selectedTrace.method)
+										}
+										styles={{ label: { textTransform: "none" } }}
+										variant="light"
+									>
+										{isMiddlewareTrace(selectedTrace)
+											? "Middleware"
+											: getTraceKindLabel(selectedTrace.method)}
+									</Badge>
+								)}
 								<Text fw={700} size="sm">
 									{selectedTrace.url}
 								</Text>
 							</Group>
 							<Group gap="xs">
-								<Badge color={selectedTrace.status === "ok" ? "green" : "red"}>
-									{selectedTrace.statusCode ?? "-"} {selectedTrace.status}
-								</Badge>
-								<Badge color="gray" variant="light">
-									{Math.round(selectedTrace.durationMs)} ms
-								</Badge>
-								<Tooltip
-									label="Status is the HTTP/result status. Duration is elapsed wall-clock time for the trace; nested span durations are inclusive and should not be summed directly."
-									multiline
-									w={300}
-									withArrow
-								>
-									<ActionIcon
-										aria-label="Trace status and duration help"
-										color="gray"
-										size="sm"
-										variant="subtle"
+								{isHttpTrace(selectedTrace) ? (
+									<Badge color={getStatusCodeColor(selectedTrace.statusCode)}>
+										{selectedTrace.statusCode ?? "-"} {selectedTrace.status}
+									</Badge>
+								) : (
+									<Badge
+										color={getTraceOutcome(selectedTrace).color}
+										styles={{ label: { textTransform: "none" } }}
 									>
-										<InfoIcon />
-									</ActionIcon>
-								</Tooltip>
+										{getTraceOutcome(selectedTrace).label}
+									</Badge>
+								)}
+								{!synthetic && (
+									<Badge color="gray" variant="light">
+										{Math.round(selectedTrace.durationMs)} ms
+									</Badge>
+								)}
 							</Group>
 						</Group>
 
-						{viewMode === "response" && (
+						{effectiveViewMode === "response" && (
 							<TraceResponseTab
-								response={response}
 								trace={selectedTrace}
-								noTraceWarning={false}
+								noTraceWarning={synthetic}
 							/>
 						)}
 
-						{viewMode === "trace" && <TraceListTab trace={selectedTrace} />}
+						{effectiveViewMode === "trace" && (
+							<TraceListTab trace={selectedTrace} />
+						)}
 
-						{viewMode === "graph" && (
+						{effectiveViewMode === "graph" && (
 							<Suspense fallback={<Loader size="sm" />}>
 								<TraceTreeTab trace={selectedTrace} />
 							</Suspense>
@@ -117,35 +137,9 @@ export function TraceDetailsPaper({
 					</Stack>
 				)}
 
-				{!selectedTrace && noTraceWarning && response && (
-					<Stack gap="sm" className={styles.traceContent}>
-						<TraceResponseTab response={response} trace={null} noTraceWarning />
-					</Stack>
-				)}
-
-				{!selectedTrace && !noTraceWarning && <EmptyState />}
+				{!selectedTrace && <EmptyState />}
 			</Stack>
 		</Paper>
-	);
-}
-
-function InfoIcon() {
-	return (
-		<svg
-			aria-hidden="true"
-			fill="none"
-			height="14"
-			stroke="currentColor"
-			strokeLinecap="round"
-			strokeLinejoin="round"
-			strokeWidth="2"
-			viewBox="0 0 24 24"
-			width="14"
-		>
-			<circle cx="12" cy="12" r="10" />
-			<path d="M12 16v-4" />
-			<path d="M12 8h.01" />
-		</svg>
 	);
 }
 
@@ -157,7 +151,7 @@ function EmptyState() {
 					No trace selected
 				</Text>
 				<Text c="dimmed" size="sm">
-					Run a route or select a trace from history
+					Run a route, invoke a provider, or select a trace from history
 				</Text>
 			</Stack>
 		</Center>

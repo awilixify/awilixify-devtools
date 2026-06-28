@@ -1,4 +1,4 @@
-import type { ModuleGraphNode, GetGraphResponse } from "@/api/model";
+import type { GetGraphResponse, ModuleGraphNode } from "@/api/model";
 import type { ProviderFocusInput, ProviderFocusState } from "../types";
 
 export function getProviderFocusState(

@@ -27,6 +27,7 @@ import { useMutation, useQuery, useSuspenseQuery } from "@tanstack/react-query";
 import type {
 	GetDevtoolsPlaygroundMethodsParams,
 	GetProviderMethodsResponse,
+	InvokeHandlerBody,
 	InvokeProviderBody,
 	InvokeProviderResponse,
 } from "../model";
@@ -63,8 +64,8 @@ export const getGetDevtoolsPlaygroundMethodsUrl = (
 	const stringifiedParams = normalizedParams.toString();
 
 	return stringifiedParams.length > 0
-		? `http://127.0.0.1:3001/__devtools/playground/methods?${stringifiedParams}`
-		: `http://127.0.0.1:3001/__devtools/playground/methods`;
+		? `/__devtools/playground/methods?${stringifiedParams}`
+		: `/__devtools/playground/methods`;
 };
 
 /**
@@ -90,7 +91,7 @@ export const getGetDevtoolsPlaygroundMethodsQueryKey = (
 	params?: GetDevtoolsPlaygroundMethodsParams,
 ) => {
 	return [
-		`http://127.0.0.1:3001/__devtools/playground/methods`,
+		`/__devtools/playground/methods`,
 		...(params ? [params] : []),
 	] as const;
 };
@@ -376,7 +377,7 @@ export function useGetDevtoolsPlaygroundMethodsSuspense<
 }
 
 export const getPostDevtoolsPlaygroundInvokeUrl = () => {
-	return `http://127.0.0.1:3001/__devtools/playground/invoke`;
+	return `/__devtools/playground/invoke`;
 };
 
 /**
@@ -469,6 +470,103 @@ export const usePostDevtoolsPlaygroundInvoke = <
 > => {
 	return useMutation(
 		getPostDevtoolsPlaygroundInvokeMutationOptions(options),
+		queryClient,
+	);
+};
+export const getPostDevtoolsPlaygroundInvokeHandlerUrl = () => {
+	return `/__devtools/playground/invoke-handler`;
+};
+
+/**
+ * Executes a handler through the module's query or command mediator, optionally running selected pre-handlers
+ * @summary Invoke query/command handler
+ */
+export const postDevtoolsPlaygroundInvokeHandler = async (
+	invokeHandlerBody: InvokeHandlerBody,
+	options?: RequestInit,
+): Promise<InvokeProviderResponse> => {
+	const res = await fetch(getPostDevtoolsPlaygroundInvokeHandlerUrl(), {
+		...options,
+		method: "POST",
+		headers: { "Content-Type": "application/json", ...options?.headers },
+		body: JSON.stringify(invokeHandlerBody),
+	});
+
+	const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+	const data: InvokeProviderResponse = body ? JSON.parse(body) : {};
+	return data;
+};
+
+export const getPostDevtoolsPlaygroundInvokeHandlerMutationOptions = <
+	TError = unknown,
+	TContext = unknown,
+>(options?: {
+	mutation?: UseMutationOptions<
+		Awaited<ReturnType<typeof postDevtoolsPlaygroundInvokeHandler>>,
+		TError,
+		{ data: InvokeHandlerBody },
+		TContext
+	>;
+	fetch?: RequestInit;
+}): UseMutationOptions<
+	Awaited<ReturnType<typeof postDevtoolsPlaygroundInvokeHandler>>,
+	TError,
+	{ data: InvokeHandlerBody },
+	TContext
+> => {
+	const mutationKey = ["postDevtoolsPlaygroundInvokeHandler"];
+	const { mutation: mutationOptions, fetch: fetchOptions } = options
+		? options.mutation &&
+			"mutationKey" in options.mutation &&
+			options.mutation.mutationKey
+			? options
+			: { ...options, mutation: { ...options.mutation, mutationKey } }
+		: { mutation: { mutationKey }, fetch: undefined };
+
+	const mutationFn: MutationFunction<
+		Awaited<ReturnType<typeof postDevtoolsPlaygroundInvokeHandler>>,
+		{ data: InvokeHandlerBody }
+	> = (props) => {
+		const { data } = props ?? {};
+
+		return postDevtoolsPlaygroundInvokeHandler(data, fetchOptions);
+	};
+
+	return { mutationFn, ...mutationOptions };
+};
+
+export type PostDevtoolsPlaygroundInvokeHandlerMutationResult = NonNullable<
+	Awaited<ReturnType<typeof postDevtoolsPlaygroundInvokeHandler>>
+>;
+export type PostDevtoolsPlaygroundInvokeHandlerMutationBody = InvokeHandlerBody;
+export type PostDevtoolsPlaygroundInvokeHandlerMutationError = unknown;
+
+/**
+ * @summary Invoke query/command handler
+ */
+export const usePostDevtoolsPlaygroundInvokeHandler = <
+	TError = unknown,
+	TContext = unknown,
+>(
+	options?: {
+		mutation?: UseMutationOptions<
+			Awaited<ReturnType<typeof postDevtoolsPlaygroundInvokeHandler>>,
+			TError,
+			{ data: InvokeHandlerBody },
+			TContext
+		>;
+		fetch?: RequestInit;
+	},
+	queryClient?: QueryClient,
+): UseMutationResult<
+	Awaited<ReturnType<typeof postDevtoolsPlaygroundInvokeHandler>>,
+	TError,
+	{ data: InvokeHandlerBody },
+	TContext
+> => {
+	return useMutation(
+		getPostDevtoolsPlaygroundInvokeHandlerMutationOptions(options),
 		queryClient,
 	);
 };

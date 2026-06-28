@@ -5,9 +5,22 @@
  * API for inspecting module graphs, traces, and provider impact
  * OpenAPI spec version: 1.0.0
  */
+import type { ModuleGraphGlobalProviderGroupLifetimeTypes } from "./moduleGraphGlobalProviderGroupLifetimeTypes";
+import type { ModuleGraphGlobalProviderGroupProviderAllowCircular } from "./moduleGraphGlobalProviderGroupProviderAllowCircular";
+import type { ModuleGraphGlobalProviderGroupProviderDependencies } from "./moduleGraphGlobalProviderGroupProviderDependencies";
+import type { ModuleGraphGlobalProviderGroupProviderEager } from "./moduleGraphGlobalProviderGroupProviderEager";
+import type { ModuleGraphGlobalProviderGroupProviderInitAfter } from "./moduleGraphGlobalProviderGroupProviderInitAfter";
+import type { ModuleProviderImpact } from "./moduleProviderImpact";
 
 export interface ModuleGraphGlobalProviderGroup {
 	moduleId: string;
 	moduleName: string;
 	providers: string[];
+	exports: string[];
+	providerAllowCircular: ModuleGraphGlobalProviderGroupProviderAllowCircular;
+	providerDependencies: ModuleGraphGlobalProviderGroupProviderDependencies;
+	providerEager: ModuleGraphGlobalProviderGroupProviderEager;
+	providerInitAfter: ModuleGraphGlobalProviderGroupProviderInitAfter;
+	lifetimeTypes: ModuleGraphGlobalProviderGroupLifetimeTypes;
+	impact: ModuleProviderImpact;
 }

@@ -1,9 +1,4 @@
-import fs from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
 import fastifyCors from "@fastify/cors";
-import fastifyStatic from "@fastify/static";
 import fastifySwagger from "@fastify/swagger";
 import fastifySwaggerUi from "@fastify/swagger-ui";
 import type { Deps } from "./devtools.module.js";
@@ -15,9 +10,10 @@ export class DevtoolsServer {
 	) {}
 
 	async init(): Promise<void> {
-		await this.fastify.register(fastifyCors);
+		await this.fastify.register(fastifyCors, {
+			methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+		});
 		await this.registerSwagger();
-		await this.registerBuiltUi();
 
 		this.fastify.setSerializerCompiler(() => {
 			return (data) => JSON.stringify(data);
@@ -111,55 +107,6 @@ export class DevtoolsServer {
 
 		this.fastify.log.info(
 			`[awilixify-devtools] Proxying trace requests to ${appUrl}`,
-		);
-	}
-
-	private async registerBuiltUi(): Promise<void> {
-		if (this.options.ui !== undefined) return;
-
-		const uiDistRoot = this.resolveDevtoolsUiDistRoot();
-
-		if (!fs.existsSync(path.join(uiDistRoot, "index.html"))) {
-			this.fastify.log.warn(`Devtools UI build was not found at ${uiDistRoot}`);
-
-			return;
-		}
-
-		this.fastify.get("/", async (_request, reply) =>
-			reply.type("text/html").send(await this.readUiFile("index.html")),
-		);
-
-		await this.fastify.register(fastifyStatic, {
-			decorateReply: false,
-			prefix: "/assets/",
-			root: path.join(uiDistRoot, "assets"),
-		});
-	}
-
-	private async readUiFile(file: string): Promise<string> {
-		return fs.promises.readFile(
-			path.join(this.resolveDevtoolsUiDistRoot(), file),
-			{
-				encoding: "utf8",
-			},
-		);
-	}
-
-	private resolveDevtoolsUiDistRoot(): string {
-		const serverDir = path.dirname(fileURLToPath(import.meta.url));
-		const packagedDistRoot = path.resolve(serverDir, "../devtools-ui");
-
-		if (fs.existsSync(path.join(packagedDistRoot, "index.html"))) {
-			return packagedDistRoot;
-		}
-
-		return path.join(this.resolveDevtoolsUiRoot(), "dist");
-	}
-
-	private resolveDevtoolsUiRoot(): string {
-		return path.resolve(
-			path.dirname(fileURLToPath(import.meta.url)),
-			"../devtools-ui",
 		);
 	}
 }

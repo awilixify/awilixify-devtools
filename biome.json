@@ -21,6 +21,18 @@
 			"recommended": true
 		}
 	},
+	"overrides": [
+		{
+			"includes": ["devtools-ui/src/api/**"],
+			"linter": {
+				"rules": {
+					"suspicious": {
+						"noConfusingVoidType": "off"
+					}
+				}
+			}
+		}
+	],
 	"javascript": {
 		"formatter": {
 			"quoteStyle": "double"

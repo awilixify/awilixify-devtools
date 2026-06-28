@@ -6,6 +6,16 @@ export const InvokeProviderBodySchema = Type.Object(
 		providerKey: Type.String(),
 		methodName: Type.String(),
 		args: Type.Array(Type.Any()),
+		// Method label for the recorded trace: "QUERY"/"COMMAND" for mediator
+		// invocations, "MIDDLEWARE" for pre-handler calls, "INVOKE" for plain
+		// provider calls, "ENTRYPOINT" for non-HTTP decorated entrypoints.
+		traceMethod: Type.Union([
+			Type.Literal("INVOKE"),
+			Type.Literal("QUERY"),
+			Type.Literal("COMMAND"),
+			Type.Literal("MIDDLEWARE"),
+			Type.Literal("ENTRYPOINT"),
+		]),
 	},
 	{ $id: "InvokeProviderBody" },
 );
@@ -38,8 +48,9 @@ export const InvokeProviderResponseSchema = Type.Object(
 	{
 		ok: Type.Boolean(),
 		result: Type.Optional(Type.Any()),
-		error: Type.Optional(InvokeErrorSchema),
+		invokeError: Type.Optional(InvokeErrorSchema),
 		console: Type.Array(ConsoleEntrySchema),
+		traceId: Type.String(),
 	},
 	{ $id: "InvokeProviderResponse" },
 );

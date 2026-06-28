@@ -1,20 +1,17 @@
-import { Box, Group, Text, TextInput, Title } from "@mantine/core";
+import { Box, CloseButton, Group, Text, TextInput } from "@mantine/core";
 import type { ChangeEvent } from "react";
 
 import { useGraphSettings } from "../GraphSettingsContext";
 
 export function GraphToolbar() {
-	const { searchInput, setSearchInput } = useGraphSettings();
+	const { searchInput, setSearchInput, submitSearch } = useGraphSettings();
 
 	return (
-		<Group justify="space-between" align="flex-start" gap="md">
+		<Group align="center" gap="md">
 			<Box>
 				<Text c="dimmed" size="xs" fw={700} tt="uppercase">
 					Module graph
 				</Text>
-				<Title id="graph-title" order={2}>
-					Dependencies
-				</Title>
 			</Box>
 
 			<TextInput
@@ -24,6 +21,19 @@ export function GraphToolbar() {
 				onChange={(event: ChangeEvent<HTMLInputElement>) =>
 					setSearchInput(event.currentTarget.value)
 				}
+				onKeyDown={(event) => {
+					if (event.key === "Enter") submitSearch();
+				}}
+				rightSection={
+					searchInput ? (
+						<CloseButton
+							aria-label="Clear search"
+							onClick={() => setSearchInput("")}
+							size="sm"
+						/>
+					) : null
+				}
+				rightSectionPointerEvents="auto"
 			/>
 		</Group>
 	);

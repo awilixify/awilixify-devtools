@@ -1,8 +1,8 @@
-import { MantineProvider } from "@mantine/core";
 import {
 	CodeHighlightAdapterProvider,
 	createHighlightJsAdapter,
 } from "@mantine/code-highlight";
+import { MantineProvider, Paper } from "@mantine/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider } from "@tanstack/react-router";
 import hljs from "highlight.js/lib/core";
@@ -10,7 +10,6 @@ import json from "highlight.js/lib/languages/json";
 import typescript from "highlight.js/lib/languages/typescript";
 import { useMemo } from "react";
 import { GraphView } from "../graph/GraphView";
-import { ProviderPlaygroundView } from "../provider-playground/ProviderPlaygroundView";
 import { RoutePlaygroundView } from "../route-playground/RoutePlaygroundView";
 import { createAppRouter } from "./router";
 
@@ -30,7 +29,6 @@ export function App() {
 		() =>
 			createAppRouter({
 				GraphView,
-				ProviderPlaygroundView,
 				RoutePlaygroundView,
 			}),
 		[],
@@ -46,6 +44,15 @@ export function App() {
 				headings: {
 					fontFamily:
 						"Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif",
+				},
+				components: {
+					Paper: Paper.extend({
+						defaultProps: {
+							withBorder: true,
+							radius: "sm",
+							p: "md",
+						},
+					}),
 				},
 			}}
 		>

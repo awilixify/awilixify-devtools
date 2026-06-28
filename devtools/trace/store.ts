@@ -1,20 +1,57 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import fs from "node:fs";
+import path from "node:path";
 import type {
 	RecordSpanInput,
 	RunInControllerTraceInput,
 } from "awilixify/devtools";
-import { isPromiseLike } from "awilixify/devtools";
+import { isPromiseLike, isResultLike } from "awilixify/devtools";
 import type { ConsoleEntry, Trace, TraceSpan } from "../dtos/index.js";
 import { ResponseSanitizer } from "./response-sanitizer.js";
 import type { ActiveTrace } from "./types.js";
 
-const MAX_TRACES = 5;
+const MAX_TRACES = 50;
+const PLAYGROUND_TRACE_SPAN_KIND = {
+	INVOKE: "provider",
+	MIDDLEWARE: "prehandler",
+} as const satisfies Record<string, TraceSpan["kind"]>;
+
+export type TraceCreationListenerInput<T> = RunInControllerTraceInput<T> & {
+	onTraceCreated?: (traceId: string) => void;
+};
+
+function getPlaygroundTraceSpanKind(method: string): TraceSpan["kind"] | null {
+	return (
+		PLAYGROUND_TRACE_SPAN_KIND[
+			method as keyof typeof PLAYGROUND_TRACE_SPAN_KIND
+		] ?? null
+	);
+}
+
+function getPlaygroundTraceArgs(
+	request: Trace["request"] | undefined,
+	fallback: unknown[],
+): unknown[] {
+	const body = request?.body;
+
+	if (body && typeof body === "object") {
+		const args = (body as { args?: unknown }).args;
+		if (Array.isArray(args)) return args;
+	}
+
+	return fallback;
+}
 
 export class DevtoolsTraceStore {
 	private readonly storage = new AsyncLocalStorage<ActiveTrace>();
 	private readonly responseSanitizer = new ResponseSanitizer();
 	private readonly traces: Trace[] = [];
 	private nextTraceId = 1;
+	private pendingWrite: Promise<void> = Promise.resolve();
+
+	constructor(private readonly historyFile: string | null = null) {
+		this.loadPersistedTraces();
+	}
 
 	getTraces(): Trace[] {
 		return [...this.traces];
@@ -22,6 +59,70 @@ export class DevtoolsTraceStore {
 
 	getTrace(traceId: string): Trace | null {
 		return this.traces.find((trace) => trace.id === traceId) ?? null;
+	}
+
+	clearTraces(): void {
+		this.traces.length = 0;
+		this.persistTraces();
+	}
+
+	deleteTrace(traceId: string): boolean {
+		const index = this.traces.findIndex((trace) => trace.id === traceId);
+
+		if (index === -1) return false;
+
+		this.traces.splice(index, 1);
+		this.persistTraces();
+
+		return true;
+	}
+
+	private loadPersistedTraces(): void {
+		if (!this.historyFile) return;
+
+		let persisted: unknown;
+
+		try {
+			persisted = JSON.parse(fs.readFileSync(this.historyFile, "utf8"));
+		} catch {
+			// Missing or corrupt history file - start with an empty history.
+			return;
+		}
+
+		if (!Array.isArray(persisted)) return;
+
+		this.traces.push(...(persisted as Trace[]).slice(0, MAX_TRACES));
+
+		// Ids must keep growing past the persisted ones, otherwise a restarted
+		// process would mint duplicates of trace ids already in the history.
+		for (const trace of this.traces) {
+			const match = /^trace-(\d+)$/.exec(trace.id);
+			if (match) {
+				this.nextTraceId = Math.max(this.nextTraceId, Number(match[1]) + 1);
+			}
+		}
+	}
+
+	private persistTraces(): void {
+		const historyFile = this.historyFile;
+
+		if (!historyFile) return;
+
+		const snapshot = JSON.stringify(this.traces);
+
+		// Chain writes so concurrent requests never interleave file contents;
+		// write to a temp file + rename so a killed process can't corrupt it.
+		this.pendingWrite = this.pendingWrite.then(async () => {
+			try {
+				await fs.promises.mkdir(path.dirname(historyFile), {
+					recursive: true,
+				});
+				await fs.promises.writeFile(`${historyFile}.tmp`, snapshot);
+				await fs.promises.rename(`${historyFile}.tmp`, historyFile);
+			} catch {
+				// Persistence is best-effort; tracing must never break the app.
+			}
+		});
 	}
 
 	recordSpan<T>(input: RecordSpanInput<T>): T | Promise<T> {
@@ -34,16 +135,18 @@ export class DevtoolsTraceStore {
 			id: `${activeTrace.trace.id}:span-${activeTrace.counter.nextSpanId++}`,
 			parentId: activeTrace.currentSpanId,
 			kind: input.kind,
-			label: [input.moduleName, input.providerKey, input.methodName].join("."),
+			label: [input.moduleName, input.className, input.methodName].join("."),
 			moduleId: input.moduleId ?? null,
 			moduleName: input.moduleName,
-			providerKey: input.providerKey,
+			className: input.className,
+			registrationKey: input.registrationKey,
 			methodName: input.methodName,
 			args: this.responseSanitizer.sanitize(input.args) as unknown[],
 			result: null,
 			error: null,
 			startedAt: Date.now(),
 			durationMs: 0,
+			selfDurationMs: 0,
 			status: "ok",
 			console: consoleEntries,
 		};
@@ -52,12 +155,10 @@ export class DevtoolsTraceStore {
 
 		const finish = () => {
 			span.durationMs = Date.now() - span.startedAt;
-
-			// For interceptors, show self-time (exclude proceed duration)
 			if (input.getProceedDurationMs) {
-				span.durationMs = Math.max(
-					0,
-					span.durationMs - input.getProceedDurationMs(),
+				activeTrace.proceedDurationMsBySpanId.set(
+					span.id,
+					input.getProceedDurationMs(),
 				);
 			}
 		};
@@ -76,30 +177,44 @@ export class DevtoolsTraceStore {
 						return result
 							.then(
 								(value) => {
-									span.result = this.responseSanitizer.sanitize(value);
+									this.applySpanResult(span, value);
 									return value;
 								},
 								(error) => {
 									span.status = "error";
 									span.error = this.responseSanitizer.toTraceError(error);
+									span.errorKind = "thrown";
 									throw error;
 								},
 							)
 							.finally(finish);
 					}
 
-					span.result = this.responseSanitizer.sanitize(result);
+					this.applySpanResult(span, result);
 					finish();
 					return result;
 				} catch (error) {
 					span.status = "error";
 					span.error = this.responseSanitizer.toTraceError(error);
+					span.errorKind = "thrown";
 					finish();
 
 					throw error;
 				}
 			},
 		);
+	}
+
+	// Errors returned as values (Result.error) are failures just like thrown
+	// errors, so spans surface them the same way.
+	private applySpanResult(span: TraceSpan, value: unknown): void {
+		span.result = this.responseSanitizer.sanitize(value);
+
+		if (isResultLike(value) && !value.ok) {
+			span.status = "error";
+			span.error = this.responseSanitizer.toTraceError(value.error);
+			span.errorKind = "returned";
+		}
 	}
 
 	runInCurrentSpan<T>(callback: () => T | Promise<T>): T | Promise<T> {
@@ -139,6 +254,7 @@ export class DevtoolsTraceStore {
 		}
 
 		const activeTrace = this.createTraceContext(input);
+		this.captureReplySend(activeTrace, input.args);
 
 		return this.storage.run(activeTrace, () => {
 			try {
@@ -167,10 +283,10 @@ export class DevtoolsTraceStore {
 	}
 
 	private createTraceContext(
-		input: RunInControllerTraceInput<unknown>,
+		input: TraceCreationListenerInput<unknown>,
 	): ActiveTrace {
 		const requestInfo = this.responseSanitizer.getRequestInfo(input.args);
-		const label = `${input.moduleName}.${input.providerKey}.${input.methodName}`;
+		const label = `${input.moduleName}.${input.className}.${input.methodName}`;
 		const rootConsoleEntries: ConsoleEntry[] = [];
 		const trace: Trace = {
 			id: `trace-${this.nextTraceId++}`,
@@ -189,39 +305,75 @@ export class DevtoolsTraceStore {
 			spans: [],
 			console: [],
 		};
+		input.onTraceCreated?.(trace.id);
 		const counter = {
 			nextSpanId: 1,
 		};
-		// Internal root span for tracking timing/errors - not added to visible spans.
+		const playgroundSpanKind = getPlaygroundTraceSpanKind(requestInfo.method);
 		const rootSpan: TraceSpan = {
 			id: `${trace.id}:span-0`,
 			parentId: null,
-			kind: "controller",
+			kind: playgroundSpanKind ?? "controller",
 			label:
-				requestInfo.method === "INVOKE"
+				requestInfo.method === "INVOKE" || requestInfo.method === "ENTRYPOINT"
 					? label
 					: `${requestInfo.method} ${trace.path}`,
 			moduleId: null,
 			moduleName: input.moduleName,
-			providerKey: input.providerKey,
+			className: input.className,
+			registrationKey: input.registrationKey,
 			methodName: input.methodName,
-			args: this.responseSanitizer.sanitize(input.args) as unknown[],
+			args: this.responseSanitizer.sanitize(
+				playgroundSpanKind
+					? getPlaygroundTraceArgs(requestInfo.request, input.args)
+					: input.args,
+			) as unknown[],
 			result: null,
 			error: null,
 			startedAt: Date.now(),
 			durationMs: 0,
+			selfDurationMs: 0,
 			status: "ok",
 			console: rootConsoleEntries,
 		};
 
+		if (playgroundSpanKind) {
+			trace.spans.push(rootSpan);
+		}
+
 		return {
 			trace,
-			currentSpanId: null, // No current span - all root-level spans get parentId: null
+			currentSpanId: playgroundSpanKind ? rootSpan.id : null,
 			currentConsoleEntries: rootConsoleEntries,
 			counter,
+			proceedDurationMsBySpanId: new Map(),
 			rootSpan,
 			finished: false,
 			restoreConsole: this.setupConsoleCapture(),
+			replyCapture: {
+				sent: false,
+				payload: undefined,
+			},
+		};
+	}
+
+	/**
+	 * The app's HTTP layer can send a different payload than the controller
+	 * returned (e.g. a failed Result mapped to an HTTP error body), so record
+	 * what actually goes through reply.send().
+	 */
+	private captureReplySend(activeTrace: ActiveTrace, args?: unknown[]): void {
+		const reply = args?.[1] as { send?: unknown } | undefined;
+
+		if (!reply || typeof reply.send !== "function") return;
+
+		const originalSend = reply.send as (...sendArgs: unknown[]) => unknown;
+
+		reply.send = (...sendArgs: unknown[]) => {
+			activeTrace.replyCapture.sent = true;
+			activeTrace.replyCapture.payload = sendArgs[0];
+
+			return originalSend.apply(reply, sendArgs);
 		};
 	}
 
@@ -239,29 +391,187 @@ export class DevtoolsTraceStore {
 		activeTrace.finished = true;
 		activeTrace.restoreConsole();
 		rootSpan.durationMs = Date.now() - rootSpan.startedAt;
+		rootSpan.selfDurationMs = rootSpan.durationMs;
 		trace.durationMs = rootSpan.durationMs;
+		this.finalizeSpanSelfDurations(
+			trace,
+			activeTrace.proceedDurationMsBySpanId,
+		);
 
-		trace.statusCode = this.extractStatusCode(options.args, options.response);
-		trace.response = this.responseSanitizer.sanitize(options.response);
+		// Errors returned as values (Result.error) fail the trace like thrown ones.
+		const resultError =
+			isResultLike(options.response) && !options.response.ok
+				? options.response.error
+				: undefined;
+		const error = options.error !== undefined ? options.error : resultError;
 
-		if (options.error !== undefined) {
-			const traceError = this.responseSanitizer.toTraceError(options.error);
+		if (error !== undefined) {
+			const traceError = this.responseSanitizer.toTraceError(error);
+			const errorKind = options.error !== undefined ? "thrown" : "returned";
+
 			rootSpan.status = "error";
 			rootSpan.error = traceError;
+			rootSpan.errorKind = errorKind;
 			trace.status = "error";
 			trace.error = traceError;
+			trace.errorKind = errorKind;
+			trace.response = this.responseSanitizer.sanitize(
+				options.error !== undefined
+					? (this.extractErrorResponse(options.error) ?? null)
+					: options.response,
+			);
+		} else {
+			rootSpan.result = this.responseSanitizer.sanitize(options.response);
+			trace.response = this.responseSanitizer.sanitize(options.response);
 		}
+
+		trace.statusCode = this.extractStatusCode(
+			options.args,
+			options.response,
+			error,
+		);
 
 		this.traces.unshift(trace);
 		this.traces.splice(MAX_TRACES);
+		this.trackFinalReply(activeTrace, options.args);
+		this.persistTraces();
+	}
+
+	/**
+	 * The traced controller returns before the HTTP layer maps its return value
+	 * onto the reply (e.g. a failed Result becoming a 404 with a mapped error
+	 * body), so the status code and response read in finishTrace can be stale.
+	 * Re-read them once the response was actually sent.
+	 */
+	private trackFinalReply(activeTrace: ActiveTrace, args?: unknown[]): void {
+		const { replyCapture, trace } = activeTrace;
+		const reply = args?.[1] as
+			| {
+					once?: unknown;
+					raw?: {
+						once?: (event: string, callback: () => void) => void;
+						statusCode?: unknown;
+						writableEnded?: boolean;
+					};
+					statusCode?: unknown;
+			  }
+			| undefined;
+		// Fastify wraps the raw response in reply.raw; in Express-style
+		// frameworks the reply itself is the raw http.ServerResponse.
+		const raw =
+			reply?.raw ??
+			(typeof reply?.once === "function"
+				? (reply as NonNullable<typeof reply>["raw"])
+				: undefined);
+
+		if (!raw || typeof raw.once !== "function") return;
+
+		const updateFromReply = () => {
+			const statusCode =
+				typeof reply?.statusCode === "number"
+					? reply.statusCode
+					: raw.statusCode;
+			let changed = false;
+
+			if (typeof statusCode === "number" && statusCode !== trace.statusCode) {
+				trace.statusCode = statusCode;
+				changed = true;
+			}
+
+			if (replyCapture.sent) {
+				trace.response = this.responseSanitizer.sanitize(replyCapture.payload);
+				changed = true;
+			}
+
+			if (changed) this.persistTraces();
+		};
+
+		if (raw.writableEnded) {
+			updateFromReply();
+		} else {
+			raw.once("finish", updateFromReply);
+		}
+	}
+
+	private finalizeSpanSelfDurations(
+		trace: Trace,
+		proceedDurationMsBySpanId: Map<string, number>,
+	): void {
+		const childrenByParentId = new Map<string, TraceSpan[]>();
+
+		for (const span of trace.spans) {
+			if (!span.parentId) continue;
+
+			const children = childrenByParentId.get(span.parentId) ?? [];
+			children.push(span);
+			childrenByParentId.set(span.parentId, children);
+		}
+
+		for (const span of trace.spans) {
+			const proceedDurationMs = proceedDurationMsBySpanId.get(span.id);
+			const nestedDurationMs =
+				proceedDurationMs ??
+				this.getChildIntervalDurationMs(span, childrenByParentId);
+
+			span.selfDurationMs = Math.max(0, span.durationMs - nestedDurationMs);
+		}
+	}
+
+	private getChildIntervalDurationMs(
+		span: TraceSpan,
+		childrenByParentId: Map<string, TraceSpan[]>,
+	): number {
+		const children = childrenByParentId.get(span.id);
+		if (!children || children.length === 0) return 0;
+
+		const spanStart = span.startedAt;
+		const spanEnd = span.startedAt + span.durationMs;
+		const intervals = children
+			.map((child) => ({
+				end: Math.min(spanEnd, child.startedAt + child.durationMs),
+				start: Math.max(spanStart, child.startedAt),
+			}))
+			.filter((interval) => interval.end > interval.start)
+			.sort((left, right) => left.start - right.start);
+
+		let durationMs = 0;
+		let currentStart: number | null = null;
+		let currentEnd: number | null = null;
+
+		for (const interval of intervals) {
+			if (currentStart === null || currentEnd === null) {
+				currentStart = interval.start;
+				currentEnd = interval.end;
+				continue;
+			}
+
+			if (interval.start <= currentEnd) {
+				currentEnd = Math.max(currentEnd, interval.end);
+				continue;
+			}
+
+			durationMs += currentEnd - currentStart;
+			currentStart = interval.start;
+			currentEnd = interval.end;
+		}
+
+		if (currentStart !== null && currentEnd !== null) {
+			durationMs += currentEnd - currentStart;
+		}
+
+		return durationMs;
 	}
 
 	private extractStatusCode(
 		args?: unknown[],
 		response?: unknown,
+		error?: unknown,
 	): number | null {
+		const errorStatusCode = this.extractErrorStatusCode(error);
+		if (errorStatusCode !== null) return errorStatusCode;
+
 		// Try to get status code from response object (e.g., Fastify reply)
-		if (args && args[1] && typeof args[1] === "object") {
+		if (args?.[1] && typeof args[1] === "object") {
 			const reply = args[1] as { statusCode?: unknown };
 			if (typeof reply.statusCode === "number") {
 				return reply.statusCode;
@@ -276,7 +586,54 @@ export class DevtoolsTraceStore {
 			}
 		}
 
+		return error === undefined ? null : 500;
+	}
+
+	private extractErrorStatusCode(error: unknown): number | null {
+		if (!error || typeof error !== "object") return null;
+
+		const errorObject = error as {
+			getStatus?: unknown;
+			status?: unknown;
+			statusCode?: unknown;
+		};
+
+		if (typeof errorObject.getStatus === "function") {
+			const status = errorObject.getStatus();
+			if (typeof status === "number") return status;
+		}
+
+		if (typeof errorObject.statusCode === "number")
+			return errorObject.statusCode;
+		if (typeof errorObject.status === "number") return errorObject.status;
+
 		return null;
+	}
+
+	private extractErrorResponse(error: unknown): unknown {
+		if (!error || typeof error !== "object") return undefined;
+
+		const errorObject = error as {
+			getResponse?: unknown;
+			message?: unknown;
+		};
+
+		if (typeof errorObject.getResponse === "function") {
+			return errorObject.getResponse();
+		}
+
+		const statusCode = this.extractErrorStatusCode(error);
+		if (statusCode !== null) {
+			return {
+				message:
+					typeof errorObject.message === "string"
+						? errorObject.message
+						: "Request failed",
+				statusCode,
+			};
+		}
+
+		return undefined;
 	}
 
 	private setupConsoleCapture(): () => void {

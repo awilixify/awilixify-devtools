@@ -1,5 +1,6 @@
 import type { Edge, Node } from "@xyflow/react";
 import ELK from "elkjs/lib/elk.bundled.js";
+import { providerBlockCenterY } from "./provider-node-metrics";
 
 export type LayoutOptions = {
 	pinGlobalModulesToTop?: boolean;
@@ -123,7 +124,28 @@ function pinGlobalModulesToTop<TNode extends Node>(
 		String(a.data?.name ?? a.id).localeCompare(String(b.data?.name ?? b.id)),
 	);
 	const globalIds = new Set(sortedGlobalNodes.map((node) => node.id));
-	let cursorX = Math.min(...nodes.map((node) => node.position.x));
+
+	// Center the global row horizontally over the rest of the graph, rather than
+	// left-aligning it with the leftmost node.
+	const totalGlobalWidth =
+		sortedGlobalNodes.reduce(
+			(sum, node) => sum + getNodeSize(node, "width", 260),
+			0,
+		) +
+		gap * Math.max(0, sortedGlobalNodes.length - 1);
+	const nonGlobalNodes = nodes.filter((node) => !globalIds.has(node.id));
+	const contentCenterX =
+		nonGlobalNodes.length > 0
+			? (Math.min(...nonGlobalNodes.map((node) => node.position.x)) +
+					Math.max(
+						...nonGlobalNodes.map(
+							(node) => node.position.x + getNodeSize(node, "width", 260),
+						),
+					)) /
+				2
+			: Math.min(...nodes.map((node) => node.position.x)) +
+				totalGlobalWidth / 2;
+	let cursorX = contentCenterX - totalGlobalWidth / 2;
 
 	const globalPositions = new Map<string, { x: number; y: number }>();
 
@@ -230,54 +252,34 @@ function getProviderHandleY(node: Node, handleId: string): number {
 				importedProviderGroups?: Array<{
 					moduleId: string;
 					providers: string[];
+					members?: unknown[];
 				}>;
 				providers?: string[];
+				ownMembers?: unknown[];
 		  }
 		| undefined;
-	const blockStartY = 44;
-	const stackGap = 10;
-	const providerBlocks = [
+	// Blocks in render order: own group first, then each imported group. Row
+	// counts must match flow-nodes' getProviderBlockRowCounts.
+	const blocks = [
 		{
 			handleId: "provider-group:own",
-			providerCount: data?.providers?.length ?? 0,
+			rowCount:
+				(data?.providers?.length ?? 0) + (data?.ownMembers?.length ?? 0),
 		},
-		...(data?.importedProviderGroups ?? []).map((group) => ({
-			handleId: `provider-group:${group.moduleId}`,
-			providerCount: group.providers.length,
-		})),
+		...(data?.importedProviderGroups ?? [])
+			.filter(
+				(group) =>
+					group.providers.length > 0 || (group.members?.length ?? 0) > 0,
+			)
+			.map((group) => ({
+				handleId: `provider-group:${group.moduleId}`,
+				rowCount: group.providers.length + (group.members?.length ?? 0),
+			})),
 	];
-	let cursorY = blockStartY;
+	const rowCounts = blocks.map((block) => block.rowCount);
+	const index = blocks.findIndex((block) => block.handleId === handleId);
 
-	for (const block of providerBlocks) {
-		const blockHeight = getProviderBlockHeight(block.providerCount);
-		const blockCenterY = cursorY + blockHeight / 2;
-
-		if (block.handleId === handleId) {
-			return blockCenterY;
-		}
-
-		cursorY += blockHeight + stackGap;
-	}
-
-	return (
-		blockStartY + getProviderBlockHeight(data?.providers?.length ?? 0) / 2
-	);
-}
-
-function getProviderBlockHeight(providerCount: number): number {
-	const paperPaddingY = 16;
-	const titleHeight = 16;
-	const contentGap = 6;
-	const providerRowHeight = 23;
-	const emptyTextHeight = 16;
-	const providerStackGap = 6;
-	const providerContentHeight =
-		providerCount > 0
-			? providerCount * providerRowHeight +
-				(providerCount - 1) * providerStackGap
-			: emptyTextHeight;
-
-	return paperPaddingY + titleHeight + contentGap + providerContentHeight;
+	return providerBlockCenterY(rowCounts, index === -1 ? 0 : index);
 }
 
 function createEdgePath(edge: ElkRoutedEdge): string | null {

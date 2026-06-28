@@ -1,22 +1,20 @@
 import type * as Awilix from "awilix";
+import type { LifetimeType } from "awilix";
 import {
 	hasUseClass,
 	type InternalModuleLike as M,
 	type ModuleDecoratorMetadata,
 } from "awilixify/devtools";
-import type {
-	GetGraphResponse,
-	ModuleGraphEdge,
-	ModuleGraphNode,
-} from "../dtos/index.js";
+import type { ModuleGraphEdge } from "../dtos/index.js";
 import { ModuleGraphProviderCollector } from "./provider-collector.js";
 import { ModuleGraphRouteCollector } from "./route-collector.js";
+import type { ModuleGraphInternal, ModuleGraphNodeInternal } from "./types.js";
 
-type ModuleGraph = GetGraphResponse;
+type ModuleGraph = ModuleGraphInternal;
 
 export class ModuleGraphCollector {
 	private rootModule!: M;
-	private readonly modules = new Map<string, ModuleGraphNode>();
+	private readonly modules = new Map<string, ModuleGraphNodeInternal>();
 	private readonly edges = new Map<string, ModuleGraphEdge>();
 	private readonly providerCollector = new ModuleGraphProviderCollector();
 
@@ -113,7 +111,7 @@ export class ModuleGraphCollector {
 		this.edges.set(`${edge.from}:${edge.to}:${edge.type}`, edge);
 	}
 
-	private createNode(id: string, module: M): ModuleGraphNode {
+	private createNode(id: string, module: M): ModuleGraphNodeInternal {
 		const kind =
 			module === this.rootModule
 				? "root"
@@ -136,16 +134,37 @@ export class ModuleGraphCollector {
 			...this.providerCollector.collectProviders(module),
 			exports: [...(module.exports ?? [])],
 			controllers: (module.controllers ?? []).map(this.getClassName),
+			controllerLifetimeTypes: this.getControllerLifetimeTypes(module),
 			queryHandlers: (module.queryHandlers ?? []).map(this.getClassName),
 			commandHandlers: (module.commandHandlers ?? []).map(this.getClassName),
+			queryHandlerKeys: this.getHandlerKeys(module.queryHandlers),
+			commandHandlerKeys: this.getHandlerKeys(module.commandHandlers),
 			queryPreHandlers: Object.keys(module.queryPreHandlers ?? {}),
 			queryPreHandlerExports: [...(module.queryPreHandlerExports ?? [])],
 			commandPreHandlers: Object.keys(module.commandPreHandlers ?? {}),
 			commandPreHandlerExports: [...(module.commandPreHandlerExports ?? [])],
+			queryPreHandlerClassNames: this.getFeatureClassNames(
+				module.queryPreHandlers,
+			),
+			commandPreHandlerClassNames: this.getFeatureClassNames(
+				module.commandPreHandlers,
+			),
+			queryPreHandlerLifetimeTypes: this.getFeatureLifetimeTypes(
+				module.queryPreHandlers,
+				module.providerOptions?.lifetime,
+			),
+			commandPreHandlerLifetimeTypes: this.getFeatureLifetimeTypes(
+				module.commandPreHandlers,
+				module.providerOptions?.lifetime,
+			),
 			interceptors: Object.keys(module.interceptors ?? {}),
 			interceptorExports: [...(module.interceptorExports ?? [])],
+			interceptorClassNames: this.getFeatureClassNames(module.interceptors),
+			interceptorDecoratorNames: this.getInterceptorDecoratorNames(module),
 			initializers: Object.keys(module.initializers ?? {}),
 			initializerExports: [...(module.initializerExports ?? [])],
+			initializerClassNames: this.getFeatureClassNames(module.initializers),
+			entrypoints: [],
 			routes: [],
 			impact: {
 				added: [],
@@ -154,6 +173,152 @@ export class ModuleGraphCollector {
 				deleted: [],
 			},
 		};
+	}
+
+	// Controllers can be registered as `{ useClass, lifetime }`; entrypoints then
+	// inherit that lifetime. Mirrors the provider fallback: own lifetime, else the
+	// module's provider lifetime, else SINGLETON.
+	private getControllerLifetimeTypes(module: M): Record<string, LifetimeType> {
+		const fallback = module.providerOptions?.lifetime;
+
+		return Object.fromEntries(
+			(module.controllers ?? []).map((controller) => [
+				this.getClassName(controller),
+				this.getLifetime(controller, fallback),
+			]),
+		);
+	}
+
+	// Keyed features (pre-handlers) can carry a lifetime the same way, keyed by
+	// their registration key ("auth").
+	private getFeatureLifetimeTypes(
+		features: Record<string, unknown> | undefined,
+		fallback?: LifetimeType,
+	): Record<string, LifetimeType> {
+		return Object.fromEntries(
+			Object.entries(features ?? {}).map(([key, feature]) => [
+				key,
+				this.getLifetime(feature, fallback),
+			]),
+		);
+	}
+
+	private getLifetime(value: unknown, fallback?: LifetimeType): LifetimeType {
+		return (
+			(value as { lifetime?: LifetimeType })?.lifetime ??
+			fallback ??
+			"SINGLETON"
+		);
+	}
+
+	// Maps each keyed feature ("auth") to its class name so the playground can
+	// match trace spans (which carry class names) back to registration keys.
+	private getFeatureClassNames(
+		features: Record<string, unknown> | undefined,
+	): Record<string, string> {
+		return Object.fromEntries(
+			Object.entries(features ?? {}).map(([key, feature]) => [
+				key,
+				this.getClassName(feature),
+			]),
+		);
+	}
+
+	private getInterceptorDecoratorNames(module: M): Record<string, string[]> {
+		const namesByKey = new Map<string, Set<string>>();
+
+		for (const classTarget of this.getModuleClasses(module)) {
+			for (const [decoratorKey, decoratorNames] of this.getDecoratorStateNames(
+				classTarget,
+			)) {
+				const names = namesByKey.get(decoratorKey) ?? new Set<string>();
+
+				for (const decoratorName of decoratorNames) {
+					names.add(decoratorName);
+				}
+
+				namesByKey.set(decoratorKey, names);
+			}
+		}
+
+		return Object.fromEntries(
+			[...namesByKey.entries()].map(([key, names]) => [key, [...names]]),
+		);
+	}
+
+	private getModuleClasses(module: M): unknown[] {
+		return [
+			...Object.values(module.providers ?? {}),
+			...(module.controllers ?? []),
+			...(module.queryHandlers ?? []),
+			...(module.commandHandlers ?? []),
+		].flatMap((value) => {
+			const classTarget = hasUseClass(value) ? value.useClass : value;
+
+			return typeof classTarget === "function" ? [classTarget] : [];
+		});
+	}
+
+	private getDecoratorStateNames(target: unknown): Array<[string, string[]]> {
+		const metadataSymbol = (Symbol as { metadata?: symbol }).metadata;
+		if (!metadataSymbol) return [];
+
+		const metadata = (target as { [metadataSymbol]?: unknown })?.[
+			metadataSymbol
+		];
+		if (!metadata || typeof metadata !== "object") return [];
+
+		return [
+			...Object.getOwnPropertyNames(metadata),
+			...Object.getOwnPropertySymbols(metadata),
+		].flatMap((metadataKey) => {
+			const state = (metadata as Record<PropertyKey, unknown>)[metadataKey];
+			const decoratorKey = this.getDecoratorKey(metadataKey);
+			const decoratorNames = this.getDecoratorNames(state);
+
+			return decoratorKey && decoratorNames.length > 0
+				? [[decoratorKey, decoratorNames] as [string, string[]]]
+				: [];
+		});
+	}
+
+	private getDecoratorKey(metadataKey: string | symbol): string | null {
+		if (typeof metadataKey !== "symbol") return null;
+
+		const description = metadataKey.description;
+		if (!description?.startsWith("DecoratorState:")) return null;
+
+		return description.slice("DecoratorState:".length);
+	}
+
+	private getDecoratorNames(state: unknown): string[] {
+		const decoratorNames = (state as { decoratorNames?: unknown })
+			?.decoratorNames;
+
+		if (!(decoratorNames instanceof Map)) return [];
+
+		return [...new Set([...decoratorNames.values()])].filter(
+			(name): name is string => typeof name === "string" && name.length > 0,
+		);
+	}
+
+	// Maps each handler's static mediator key ("cats/get-cats") to its class
+	// name so the playground can invoke handlers through the mediator.
+	private getHandlerKeys(
+		handlers: readonly unknown[] | undefined,
+	): Record<string, string> {
+		const entries: [string, string][] = [];
+
+		for (const handler of handlers ?? []) {
+			const handlerClass = hasUseClass(handler) ? handler.useClass : handler;
+			const key = (handlerClass as { key?: unknown })?.key;
+
+			if (typeof key === "string") {
+				entries.push([key, this.getClassName(handler)]);
+			}
+		}
+
+		return Object.fromEntries(entries);
 	}
 
 	private getClassName(value: unknown): string {

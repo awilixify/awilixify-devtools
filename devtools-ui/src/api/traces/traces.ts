@@ -10,18 +10,26 @@ import type {
 	DataTag,
 	DefinedInitialDataOptions,
 	DefinedUseQueryResult,
+	MutationFunction,
 	QueryClient,
 	QueryFunction,
 	QueryKey,
 	UndefinedInitialDataOptions,
+	UseMutationOptions,
+	UseMutationResult,
 	UseQueryOptions,
 	UseQueryResult,
 	UseSuspenseQueryOptions,
 	UseSuspenseQueryResult,
 } from "@tanstack/react-query";
-import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useSuspenseQuery } from "@tanstack/react-query";
 
-import type { GetTraceResponse, GetTracesResponse } from "../model";
+import type {
+	ClearTracesResponse,
+	DeleteTraceResponse,
+	GetTraceResponse,
+	GetTracesResponse,
+} from "../model";
 
 const withQueryKey = <T extends object, K>(
 	query: T,
@@ -42,7 +50,7 @@ const withQueryKey = <T extends object, K>(
 };
 
 export const getGetDevtoolsTracesUrl = () => {
-	return `http://127.0.0.1:3001/__devtools/traces`;
+	return `/__devtools/traces`;
 };
 
 /**
@@ -64,7 +72,7 @@ export const getDevtoolsTraces = async (
 };
 
 export const getGetDevtoolsTracesQueryKey = () => {
-	return [`http://127.0.0.1:3001/__devtools/traces`] as const;
+	return [`/__devtools/traces`] as const;
 };
 
 export const getGetDevtoolsTracesQueryOptions = <
@@ -323,8 +331,97 @@ export function useGetDevtoolsTracesSuspense<
 	return withQueryKey(query, queryOptions.queryKey);
 }
 
+export const getDeleteDevtoolsTracesUrl = () => {
+	return `/__devtools/traces`;
+};
+
+/**
+ * Removes all traces from memory and the persisted history file
+ * @summary Clear trace history
+ */
+export const deleteDevtoolsTraces = async (
+	options?: RequestInit,
+): Promise<ClearTracesResponse> => {
+	const res = await fetch(getDeleteDevtoolsTracesUrl(), {
+		...options,
+		method: "DELETE",
+	});
+
+	const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+	const data: ClearTracesResponse = body ? JSON.parse(body) : {};
+	return data;
+};
+
+export const getDeleteDevtoolsTracesMutationOptions = <
+	TError = unknown,
+	TContext = unknown,
+>(options?: {
+	mutation?: UseMutationOptions<
+		Awaited<ReturnType<typeof deleteDevtoolsTraces>>,
+		TError,
+		void,
+		TContext
+	>;
+	fetch?: RequestInit;
+}): UseMutationOptions<
+	Awaited<ReturnType<typeof deleteDevtoolsTraces>>,
+	TError,
+	void,
+	TContext
+> => {
+	const mutationKey = ["deleteDevtoolsTraces"];
+	const { mutation: mutationOptions, fetch: fetchOptions } = options
+		? options.mutation &&
+			"mutationKey" in options.mutation &&
+			options.mutation.mutationKey
+			? options
+			: { ...options, mutation: { ...options.mutation, mutationKey } }
+		: { mutation: { mutationKey }, fetch: undefined };
+
+	const mutationFn: MutationFunction<
+		Awaited<ReturnType<typeof deleteDevtoolsTraces>>,
+		void
+	> = () => {
+		return deleteDevtoolsTraces(fetchOptions);
+	};
+
+	return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteDevtoolsTracesMutationResult = NonNullable<
+	Awaited<ReturnType<typeof deleteDevtoolsTraces>>
+>;
+
+export type DeleteDevtoolsTracesMutationError = unknown;
+
+/**
+ * @summary Clear trace history
+ */
+export const useDeleteDevtoolsTraces = <TError = unknown, TContext = unknown>(
+	options?: {
+		mutation?: UseMutationOptions<
+			Awaited<ReturnType<typeof deleteDevtoolsTraces>>,
+			TError,
+			void,
+			TContext
+		>;
+		fetch?: RequestInit;
+	},
+	queryClient?: QueryClient,
+): UseMutationResult<
+	Awaited<ReturnType<typeof deleteDevtoolsTraces>>,
+	TError,
+	void,
+	TContext
+> => {
+	return useMutation(
+		getDeleteDevtoolsTracesMutationOptions(options),
+		queryClient,
+	);
+};
 export const getGetDevtoolsTracesTraceIdUrl = (traceId: string) => {
-	return `http://127.0.0.1:3001/__devtools/traces/${traceId}`;
+	return `/__devtools/traces/${traceId}`;
 };
 
 /**
@@ -347,7 +444,7 @@ export const getDevtoolsTracesTraceId = async (
 };
 
 export const getGetDevtoolsTracesTraceIdQueryKey = (traceId: string) => {
-	return [`http://127.0.0.1:3001/__devtools/traces/${traceId}`] as const;
+	return [`/__devtools/traces/${traceId}`] as const;
 };
 
 export const getGetDevtoolsTracesTraceIdQueryOptions = <
@@ -634,3 +731,99 @@ export function useGetDevtoolsTracesTraceIdSuspense<
 
 	return withQueryKey(query, queryOptions.queryKey);
 }
+
+export const getDeleteDevtoolsTracesTraceIdUrl = (traceId: string) => {
+	return `/__devtools/traces/${traceId}`;
+};
+
+/**
+ * Removes a single trace from memory and the persisted history
+ * @summary Delete trace by ID
+ */
+export const deleteDevtoolsTracesTraceId = async (
+	traceId: string,
+	options?: RequestInit,
+): Promise<DeleteTraceResponse> => {
+	const res = await fetch(getDeleteDevtoolsTracesTraceIdUrl(traceId), {
+		...options,
+		method: "DELETE",
+	});
+
+	const body = [204, 205, 304].includes(res.status) ? null : await res.text();
+
+	const data: DeleteTraceResponse = body ? JSON.parse(body) : {};
+	return data;
+};
+
+export const getDeleteDevtoolsTracesTraceIdMutationOptions = <
+	TError = unknown,
+	TContext = unknown,
+>(options?: {
+	mutation?: UseMutationOptions<
+		Awaited<ReturnType<typeof deleteDevtoolsTracesTraceId>>,
+		TError,
+		{ traceId: string },
+		TContext
+	>;
+	fetch?: RequestInit;
+}): UseMutationOptions<
+	Awaited<ReturnType<typeof deleteDevtoolsTracesTraceId>>,
+	TError,
+	{ traceId: string },
+	TContext
+> => {
+	const mutationKey = ["deleteDevtoolsTracesTraceId"];
+	const { mutation: mutationOptions, fetch: fetchOptions } = options
+		? options.mutation &&
+			"mutationKey" in options.mutation &&
+			options.mutation.mutationKey
+			? options
+			: { ...options, mutation: { ...options.mutation, mutationKey } }
+		: { mutation: { mutationKey }, fetch: undefined };
+
+	const mutationFn: MutationFunction<
+		Awaited<ReturnType<typeof deleteDevtoolsTracesTraceId>>,
+		{ traceId: string }
+	> = (props) => {
+		const { traceId } = props ?? {};
+
+		return deleteDevtoolsTracesTraceId(traceId, fetchOptions);
+	};
+
+	return { mutationFn, ...mutationOptions };
+};
+
+export type DeleteDevtoolsTracesTraceIdMutationResult = NonNullable<
+	Awaited<ReturnType<typeof deleteDevtoolsTracesTraceId>>
+>;
+
+export type DeleteDevtoolsTracesTraceIdMutationError = unknown;
+
+/**
+ * @summary Delete trace by ID
+ */
+export const useDeleteDevtoolsTracesTraceId = <
+	TError = unknown,
+	TContext = unknown,
+>(
+	options?: {
+		mutation?: UseMutationOptions<
+			Awaited<ReturnType<typeof deleteDevtoolsTracesTraceId>>,
+			TError,
+			{ traceId: string },
+			TContext
+		>;
+		fetch?: RequestInit;
+	},
+	queryClient?: QueryClient,
+): UseMutationResult<
+	Awaited<ReturnType<typeof deleteDevtoolsTracesTraceId>>,
+	TError,
+	{ traceId: string },
+	TContext
+> => {
+	return useMutation(
+		getDeleteDevtoolsTracesTraceIdMutationOptions(options),
+		queryClient,
+	);
+};

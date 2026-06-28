@@ -1,9 +1,9 @@
-import clsx from "clsx";
 import { MarkerType } from "@xyflow/react";
+import clsx from "clsx";
 import type { GetGraphResponse } from "@/api/model";
 import type { GraphViewMode, ModuleEdgeRole, ModuleFlowEdge } from "../types";
 import {
-	getProviderGroupColor,
+	getProviderGroupColorByModuleId,
 	isFocusedDependencyEdge,
 } from "./provider-group";
 
@@ -19,6 +19,10 @@ export function toFlowEdges({
 	const cycleEdgeIds = detectCycleEdgeIds(
 		edges.filter((edge) => edge.type === "imports"),
 	);
+	const providerGroupColorByModuleId = getProviderGroupColorByModuleId(
+		edges,
+		selectedModuleId,
+	);
 
 	return edges.map((edge) => {
 		const role = getEdgeRole({
@@ -26,10 +30,12 @@ export function toFlowEdges({
 			selectedModuleId,
 			cycleEdgeIds,
 		});
+		// Same full color as the highlighted entry chips of the group this edge
+		// points at, so the arrow and those chips read as the exact same color.
 		const color =
 			viewMode === "providers" &&
 			isFocusedDependencyEdge(edge, selectedModuleId)
-				? getProviderGroupColor(edge.to)
+				? providerGroupColorByModuleId[edge.to]
 				: undefined;
 
 		return {

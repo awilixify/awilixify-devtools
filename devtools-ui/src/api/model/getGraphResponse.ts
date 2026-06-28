@@ -5,6 +5,7 @@
  * API for inspecting module graphs, traces, and provider impact
  * OpenAPI spec version: 1.0.0
  */
+import type { GetGraphResponseAvailableDecorators } from "./getGraphResponseAvailableDecorators";
 import type { ModuleGraphEdge } from "./moduleGraphEdge";
 import type { ModuleGraphGlobalProviderGroup } from "./moduleGraphGlobalProviderGroup";
 import type { ModuleGraphNode } from "./moduleGraphNode";
@@ -13,4 +14,5 @@ export interface GetGraphResponse {
 	globalProviderGroups: ModuleGraphGlobalProviderGroup[];
 	modules: ModuleGraphNode[];
 	edges: ModuleGraphEdge[];
+	availableDecorators: GetGraphResponseAvailableDecorators;
 }

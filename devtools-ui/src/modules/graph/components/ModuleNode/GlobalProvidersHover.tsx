@@ -1,6 +1,7 @@
-import { Badge, Group, HoverCard, Stack, Text } from "@mantine/core";
+import { HoverCard, Stack, Text } from "@mantine/core";
 import type { ModuleFlowNode } from "../../types";
 import styles from "./ModuleNode.module.css";
+import { ProviderGroup } from "./ProviderGroup";
 
 export function GlobalProvidersHover({
 	data,
@@ -9,8 +10,7 @@ export function GlobalProvidersHover({
 }) {
 	if (
 		data.kind === "global" ||
-		!data.isSelectedModule ||
-		data.globalProviderGroups.length === 0
+		data.globalProviderGroupsDetailed.length === 0
 	) {
 		return null;
 	}
@@ -19,7 +19,7 @@ export function GlobalProvidersHover({
 		<HoverCard openDelay={150} position="bottom-end" shadow="md" withArrow>
 			<HoverCard.Target>
 				<button
-					aria-label="Show exported global providers"
+					aria-label="Show exported global members"
 					className={styles.globalProvidersTrigger}
 					onClick={(event) => event.stopPropagation()}
 					onPointerDown={(event) => event.stopPropagation()}
@@ -35,26 +35,21 @@ export function GlobalProvidersHover({
 			>
 				<Stack gap={8}>
 					<Text c="dimmed" fw={700} size="xs">
-						Exported global providers
+						Exported global members
 					</Text>
-					{data.globalProviderGroups.map((group) => (
-						<Stack gap={4} key={group.moduleId}>
-							<Text fw={700} size="xs">
-								{group.moduleName}
-							</Text>
-							<Group gap={4}>
-								{group.providers.map((provider) => (
-									<Badge
-										className={styles.globalProviderBadge}
-										key={provider}
-										radius="sm"
-										variant="light"
-									>
-										{provider}
-									</Badge>
-								))}
-							</Group>
-						</Stack>
+					{data.globalProviderGroupsDetailed.map((group) => (
+						<ProviderGroup
+							data={data}
+							group={group}
+							groupKey={`global-hover:${group.moduleId}`}
+							key={group.moduleId}
+							providerPlaygroundModuleId={group.moduleId}
+							showHandles={false}
+							showGroupColor={false}
+							showMembers
+							tag="global"
+							width={250}
+						/>
 					))}
 				</Stack>
 			</HoverCard.Dropdown>

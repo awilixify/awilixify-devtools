@@ -5,7 +5,8 @@
 	--graph-color-dependency-bg: var(--mantine-color-blue-0);
 	--graph-color-dependent: var(--mantine-color-yellow-7);
 	--graph-color-dependent-bg: var(--mantine-color-yellow-0);
-	--graph-color-global: var(--mantine-color-teal-6);
+	--graph-color-global: var(--mantine-color-grape-6);
+	--graph-color-global-bg: var(--mantine-color-grape-0);
 	--graph-color-cycle: var(--mantine-color-red-7);
 	--graph-color-cycle-bg: var(--mantine-color-red-0);
 	--graph-color-changed-provider: var(--mantine-color-yellow-7);
@@ -21,11 +22,8 @@
 	--graph-color-eager-provider: var(--mantine-color-orange-7);
 	--graph-color-exported-provider: var(--mantine-color-green-7);
 	--graph-color-exported-provider-bg: var(--mantine-color-green-0);
-	--graph-color-provider-focus-selected: #ffe8cc;
-	--graph-color-provider-focus-same: #fff4e6;
-	--graph-color-provider-focus-dependant: var(--mantine-color-yellow-1);
-	--graph-color-search: var(--mantine-color-pink-7);
-	--graph-color-search-bg: var(--mantine-color-pink-0);
+	--graph-color-search: var(--mantine-color-indigo-6);
+	--graph-color-search-bg: var(--mantine-color-indigo-0);
 	--graph-color-internal: var(--mantine-color-yellow-7);
 	--graph-color-internal-bg: var(--mantine-color-yellow-1);
 	--graph-color-dynamic: var(--mantine-color-violet-6);
@@ -57,7 +55,7 @@ body {
 
 .graph-panel {
 	position: relative;
-	height: calc(100vh - 150px);
+	height: calc(100vh - 100px);
 	min-height: 560px;
 	overflow: hidden;
 	background: var(--graph-color-surface);
@@ -89,10 +87,12 @@ body {
 	position: absolute;
 	z-index: 0;
 	pointer-events: none;
-	border: 1px solid rgb(12 166 120 / 32%);
+	border: 1px solid
+		color-mix(in srgb, var(--graph-color-global) 40%, transparent);
 	border-radius: 8px;
-	background: rgb(230 252 245 / 72%);
-	box-shadow: inset 0 0 0 1px rgb(12 166 120 / 10%);
+	background: color-mix(in srgb, var(--graph-color-global) 8%, transparent);
+	box-shadow: inset 0 0 0 1px
+		color-mix(in srgb, var(--graph-color-global) 14%, transparent);
 }
 
 .global-modules-band-label {
@@ -117,18 +117,23 @@ body {
 
 .react-flow__node.global-graph-node [data-module-node] {
 	border-color: var(--graph-color-global);
-	background: var(--mantine-color-teal-0);
+	background: var(--graph-color-global-bg);
+	font-size: 14px;
+}
+
+.react-flow__node.global-graph-node [data-module-node] strong {
+	font-size: 17px;
 }
 
 [data-module-node][data-selected="true"] {
-	border-color: var(--graph-color-selected);
-	box-shadow: 0 0 0 3px rgb(21 144 111 / 16%);
+	border: 3px solid var(--graph-color-selected);
+	box-shadow: none;
 }
 
 .react-flow__node.selected-graph-node [data-module-node] {
-	border-color: var(--graph-color-selected);
+	border: 3px solid var(--graph-color-selected);
 	background: var(--graph-color-selected-bg);
-	box-shadow: 0 0 0 4px rgb(21 144 111 / 18%);
+	box-shadow: none;
 }
 
 .react-flow__node.dependency-graph-node [data-module-node] {
@@ -144,7 +149,8 @@ body {
 .react-flow__node.search-match-graph-node [data-module-node] {
 	border-color: var(--graph-color-search);
 	background: var(--graph-color-search-bg);
-	box-shadow: 0 0 0 4px rgb(201 42 102 / 18%);
+	box-shadow: 0 0 0 4px
+		color-mix(in srgb, var(--graph-color-search) 18%, transparent);
 }
 
 .react-flow__node.dimmed-graph-node {

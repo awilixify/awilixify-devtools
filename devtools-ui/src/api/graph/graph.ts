@@ -21,11 +21,7 @@ import type {
 } from "@tanstack/react-query";
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
 
-import type {
-	GetDevtoolsGraphParams,
-	GetGraphResponse,
-	GetModuleDetailsResponse,
-} from "../model";
+import type { GetGraphResponse, GetModuleDetailsResponse } from "../model";
 
 const withQueryKey = <T extends object, K>(
 	query: T,
@@ -45,31 +41,18 @@ const withQueryKey = <T extends object, K>(
 	return result;
 };
 
-export const getGetDevtoolsGraphUrl = (params?: GetDevtoolsGraphParams) => {
-	const normalizedParams = new URLSearchParams();
-
-	Object.entries(params || {}).forEach(([key, value]) => {
-		if (value !== undefined) {
-			normalizedParams.append(key, value === null ? "null" : String(value));
-		}
-	});
-
-	const stringifiedParams = normalizedParams.toString();
-
-	return stringifiedParams.length > 0
-		? `http://127.0.0.1:3001/__devtools/graph?${stringifiedParams}`
-		: `http://127.0.0.1:3001/__devtools/graph`;
+export const getGetDevtoolsGraphUrl = () => {
+	return `/__devtools/graph`;
 };
 
 /**
- * Returns the module dependency graph with optional filtering
+ * Returns the module dependency graph
  * @summary Get module graph
  */
 export const getDevtoolsGraph = async (
-	params?: GetDevtoolsGraphParams,
 	options?: RequestInit,
 ): Promise<GetGraphResponse> => {
-	const res = await fetch(getGetDevtoolsGraphUrl(params), {
+	const res = await fetch(getGetDevtoolsGraphUrl(), {
 		...options,
 		method: "GET",
 	});
@@ -80,39 +63,26 @@ export const getDevtoolsGraph = async (
 	return data;
 };
 
-export const getGetDevtoolsGraphQueryKey = (
-	params?: GetDevtoolsGraphParams,
-) => {
-	return [
-		`http://127.0.0.1:3001/__devtools/graph`,
-		...(params ? [params] : []),
-	] as const;
+export const getGetDevtoolsGraphQueryKey = () => {
+	return [`/__devtools/graph`] as const;
 };
 
 export const getGetDevtoolsGraphQueryOptions = <
 	TData = Awaited<ReturnType<typeof getDevtoolsGraph>>,
 	TError = unknown,
->(
-	params?: GetDevtoolsGraphParams,
-	options?: {
-		query?: Partial<
-			UseQueryOptions<
-				Awaited<ReturnType<typeof getDevtoolsGraph>>,
-				TError,
-				TData
-			>
-		>;
-		fetch?: RequestInit;
-	},
-) => {
+>(options?: {
+	query?: Partial<
+		UseQueryOptions<Awaited<ReturnType<typeof getDevtoolsGraph>>, TError, TData>
+	>;
+	fetch?: RequestInit;
+}) => {
 	const { query: queryOptions, fetch: fetchOptions } = options ?? {};
 
-	const queryKey =
-		queryOptions?.queryKey ?? getGetDevtoolsGraphQueryKey(params);
+	const queryKey = queryOptions?.queryKey ?? getGetDevtoolsGraphQueryKey();
 
 	const queryFn: QueryFunction<
 		Awaited<ReturnType<typeof getDevtoolsGraph>>
-	> = ({ signal }) => getDevtoolsGraph(params, { signal, ...fetchOptions });
+	> = ({ signal }) => getDevtoolsGraph({ signal, ...fetchOptions });
 
 	return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
 		Awaited<ReturnType<typeof getDevtoolsGraph>>,
@@ -130,7 +100,6 @@ export function useGetDevtoolsGraph<
 	TData = Awaited<ReturnType<typeof getDevtoolsGraph>>,
 	TError = unknown,
 >(
-	params: undefined | GetDevtoolsGraphParams,
 	options: {
 		query: Partial<
 			UseQueryOptions<
@@ -157,7 +126,6 @@ export function useGetDevtoolsGraph<
 	TData = Awaited<ReturnType<typeof getDevtoolsGraph>>,
 	TError = unknown,
 >(
-	params?: GetDevtoolsGraphParams,
 	options?: {
 		query?: Partial<
 			UseQueryOptions<
@@ -184,7 +152,6 @@ export function useGetDevtoolsGraph<
 	TData = Awaited<ReturnType<typeof getDevtoolsGraph>>,
 	TError = unknown,
 >(
-	params?: GetDevtoolsGraphParams,
 	options?: {
 		query?: Partial<
 			UseQueryOptions<
@@ -207,7 +174,6 @@ export function useGetDevtoolsGraph<
 	TData = Awaited<ReturnType<typeof getDevtoolsGraph>>,
 	TError = unknown,
 >(
-	params?: GetDevtoolsGraphParams,
 	options?: {
 		query?: Partial<
 			UseQueryOptions<
@@ -222,7 +188,7 @@ export function useGetDevtoolsGraph<
 ): UseQueryResult<TData, TError> & {
 	queryKey: DataTag<QueryKey, TData, TError>;
 } {
-	const queryOptions = getGetDevtoolsGraphQueryOptions(params, options);
+	const queryOptions = getGetDevtoolsGraphQueryOptions(options);
 
 	const query = useQuery(queryOptions, queryClient) as UseQueryResult<
 		TData,
@@ -235,27 +201,23 @@ export function useGetDevtoolsGraph<
 export const getGetDevtoolsGraphSuspenseQueryOptions = <
 	TData = Awaited<ReturnType<typeof getDevtoolsGraph>>,
 	TError = unknown,
->(
-	params?: GetDevtoolsGraphParams,
-	options?: {
-		query?: Partial<
-			UseSuspenseQueryOptions<
-				Awaited<ReturnType<typeof getDevtoolsGraph>>,
-				TError,
-				TData
-			>
-		>;
-		fetch?: RequestInit;
-	},
-) => {
+>(options?: {
+	query?: Partial<
+		UseSuspenseQueryOptions<
+			Awaited<ReturnType<typeof getDevtoolsGraph>>,
+			TError,
+			TData
+		>
+	>;
+	fetch?: RequestInit;
+}) => {
 	const { query: queryOptions, fetch: fetchOptions } = options ?? {};
 
-	const queryKey =
-		queryOptions?.queryKey ?? getGetDevtoolsGraphQueryKey(params);
+	const queryKey = queryOptions?.queryKey ?? getGetDevtoolsGraphQueryKey();
 
 	const queryFn: QueryFunction<
 		Awaited<ReturnType<typeof getDevtoolsGraph>>
-	> = ({ signal }) => getDevtoolsGraph(params, { signal, ...fetchOptions });
+	> = ({ signal }) => getDevtoolsGraph({ signal, ...fetchOptions });
 
 	return { queryKey, queryFn, ...queryOptions } as UseSuspenseQueryOptions<
 		Awaited<ReturnType<typeof getDevtoolsGraph>>,
@@ -273,7 +235,6 @@ export function useGetDevtoolsGraphSuspense<
 	TData = Awaited<ReturnType<typeof getDevtoolsGraph>>,
 	TError = unknown,
 >(
-	params: undefined | GetDevtoolsGraphParams,
 	options: {
 		query: Partial<
 			UseSuspenseQueryOptions<
@@ -292,7 +253,6 @@ export function useGetDevtoolsGraphSuspense<
 	TData = Awaited<ReturnType<typeof getDevtoolsGraph>>,
 	TError = unknown,
 >(
-	params?: GetDevtoolsGraphParams,
 	options?: {
 		query?: Partial<
 			UseSuspenseQueryOptions<
@@ -311,7 +271,6 @@ export function useGetDevtoolsGraphSuspense<
 	TData = Awaited<ReturnType<typeof getDevtoolsGraph>>,
 	TError = unknown,
 >(
-	params?: GetDevtoolsGraphParams,
 	options?: {
 		query?: Partial<
 			UseSuspenseQueryOptions<
@@ -334,7 +293,6 @@ export function useGetDevtoolsGraphSuspense<
 	TData = Awaited<ReturnType<typeof getDevtoolsGraph>>,
 	TError = unknown,
 >(
-	params?: GetDevtoolsGraphParams,
 	options?: {
 		query?: Partial<
 			UseSuspenseQueryOptions<
@@ -349,7 +307,7 @@ export function useGetDevtoolsGraphSuspense<
 ): UseSuspenseQueryResult<TData, TError> & {
 	queryKey: DataTag<QueryKey, TData, TError>;
 } {
-	const queryOptions = getGetDevtoolsGraphSuspenseQueryOptions(params, options);
+	const queryOptions = getGetDevtoolsGraphSuspenseQueryOptions(options);
 
 	const query = useSuspenseQuery(
 		queryOptions,
@@ -362,7 +320,7 @@ export function useGetDevtoolsGraphSuspense<
 }
 
 export const getGetDevtoolsGraphModulesModuleIdUrl = (moduleId: string) => {
-	return `http://127.0.0.1:3001/__devtools/graph/modules/${moduleId}`;
+	return `/__devtools/graph/modules/${moduleId}`;
 };
 
 /**
@@ -387,9 +345,7 @@ export const getDevtoolsGraphModulesModuleId = async (
 export const getGetDevtoolsGraphModulesModuleIdQueryKey = (
 	moduleId: string,
 ) => {
-	return [
-		`http://127.0.0.1:3001/__devtools/graph/modules/${moduleId}`,
-	] as const;
+	return [`/__devtools/graph/modules/${moduleId}`] as const;
 };
 
 export const getGetDevtoolsGraphModulesModuleIdQueryOptions = <

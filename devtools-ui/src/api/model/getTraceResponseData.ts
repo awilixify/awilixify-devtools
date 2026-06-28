@@ -7,6 +7,7 @@
  */
 import type { ConsoleEntry } from "./consoleEntry";
 import type { GetTraceResponseDataError } from "./getTraceResponseDataError";
+import type { TraceErrorKind } from "./traceErrorKind";
 import type { TraceRequest } from "./traceRequest";
 import type { TraceSpan } from "./traceSpan";
 import type { TraceSpanStatus } from "./traceSpanStatus";
@@ -25,6 +26,7 @@ export type GetTraceResponseData = {
 	response: unknown;
 	/** @nullable */
 	error: GetTraceResponseDataError;
+	errorKind?: TraceErrorKind;
 	startedAt: number;
 	durationMs: number;
 	status: TraceSpanStatus;

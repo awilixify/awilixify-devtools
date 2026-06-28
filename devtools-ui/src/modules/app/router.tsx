@@ -5,14 +5,10 @@ import {
 	createRouter,
 	type RouteComponent,
 } from "@tanstack/react-router";
+import type { GraphViewMode, ProviderFocusHighlight } from "../graph/types";
+import { createRoutePlaygroundRoute } from "../route-playground/route";
 import { AppShell } from "./AppShell";
-import type { GraphViewMode } from "../graph/types";
-import {
-	type RoutePlaygroundViewMode,
-	isRoutePlaygroundViewMode,
-} from "../route-playground/types";
-
-export type { RoutePlaygroundViewMode };
+import { readBooleanSearch, readStringSearch } from "./search-params";
 
 export type GraphRouteSearch = {
 	groupDynamic?: boolean;
@@ -22,19 +18,13 @@ export type GraphRouteSearch = {
 	globals?: boolean;
 	relatedOnly?: boolean;
 	view?: GraphViewMode;
+	focusHighlight?: ProviderFocusHighlight;
 	focusProvider?: string;
 	focusOccurrence?: string;
 };
 
-export type RoutePlaygroundSearch = {
-	route?: string;
-	trace?: string;
-	view?: RoutePlaygroundViewMode;
-};
-
 export type RouterComponents = {
 	GraphView: RouteComponent;
-	ProviderPlaygroundView: RouteComponent;
 	RoutePlaygroundView: RouteComponent;
 };
 
@@ -54,36 +44,21 @@ export function createAppRouter(components: RouterComponents) {
 			globals: readBooleanSearch(search.globals),
 			relatedOnly: readBooleanSearch(search.relatedOnly),
 			view: isGraphViewMode(search.view) ? search.view : undefined,
+			focusHighlight: isProviderFocusHighlight(search.focusHighlight)
+				? search.focusHighlight
+				: undefined,
 			focusProvider: readStringSearch(search.focusProvider),
 			focusOccurrence: readStringSearch(search.focusOccurrence),
 		}),
 		component: components.GraphView,
 	});
 
-	const playgroundRoute = createRoute({
-		getParentRoute: () => rootRoute,
-		path: "/playground",
-		component: components.ProviderPlaygroundView,
-	});
+	const routesRoute = createRoutePlaygroundRoute(
+		rootRoute,
+		components.RoutePlaygroundView,
+	);
 
-	const routesRoute = createRoute({
-		getParentRoute: () => rootRoute,
-		path: "/routes",
-		validateSearch: (
-			search: Record<string, unknown>,
-		): RoutePlaygroundSearch => ({
-			route: readStringSearch(search.route),
-			trace: readStringSearch(search.trace),
-			view: isRoutePlaygroundViewMode(search.view) ? search.view : undefined,
-		}),
-		component: components.RoutePlaygroundView,
-	});
-
-	const routeTree = rootRoute.addChildren([
-		graphRoute,
-		playgroundRoute,
-		routesRoute,
-	]);
+	const routeTree = rootRoute.addChildren([graphRoute, routesRoute]);
 
 	return createRouter({
 		history: createHashHistory(),
@@ -99,18 +74,12 @@ declare module "@tanstack/react-router" {
 	}
 }
 
-function readBooleanSearch(value: unknown): boolean | undefined {
-	if (typeof value === "boolean") return value;
-	if (value === "1" || value === "true") return true;
-	if (value === "0" || value === "false") return false;
-
-	return undefined;
-}
-
-function readStringSearch(value: unknown): string | undefined {
-	return typeof value === "string" && value.trim() ? value : undefined;
-}
-
 function isGraphViewMode(value: unknown): value is GraphViewMode {
 	return value === "dependencies" || value === "providers";
+}
+
+function isProviderFocusHighlight(
+	value: unknown,
+): value is ProviderFocusHighlight {
+	return value === "dependencies" || value === "dependants";
 }

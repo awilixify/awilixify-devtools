@@ -9,7 +9,11 @@ import {
 	type RouteSchema,
 	rollUpHttpDecoratorState,
 } from "awilixify/http";
-import type { ModuleGraphNode, ModuleGraphRoute } from "./types.js";
+import type {
+	ModuleGraphEntrypoint,
+	ModuleGraphNode,
+	ModuleGraphRoute,
+} from "./types.js";
 
 type ModuleGraphRouteCollectorOptions = {
 	getOrCreateModule(module: M): string;
@@ -26,7 +30,7 @@ export class ModuleGraphRouteCollector {
 	}: ModuleDecoratorMetadata): void {
 		for (const { controllerClass: controller } of controllers) {
 			for (const methodName of getControllerMethodNames(controller)) {
-				for (const [, resolveInitializer] of initializers) {
+				for (const [initializerKey, resolveInitializer] of initializers) {
 					const initializer = resolveInitializer();
 					const decoratorState = resolveDecoratorState(
 						controller,
@@ -38,11 +42,27 @@ export class ModuleGraphRouteCollector {
 					const metadata = decoratorState.methods.get(methodName);
 
 					if (metadata === undefined) continue;
-					if (
-						initializer.token.stateSymbol.description !==
-						HTTP_DECORATOR_STATE_TOKEN.stateSymbol.description
-					)
+					const isHttpEntrypoint =
+						initializer.token.stateSymbol.description ===
+						HTTP_DECORATOR_STATE_TOKEN.stateSymbol.description;
+					const entrypointType = getEntrypointType(
+						initializer.token.stateSymbol.description,
+					);
+					const decoratorName =
+						decoratorState.decoratorNames.get(methodName) ?? initializerKey;
+
+					if (!isHttpEntrypoint) {
+						this.addEntrypoint(module, {
+							type: entrypointType,
+							label: this.formatEntrypointLabel(entrypointType, metadata),
+							controller: controller.name,
+							handler: String(methodName),
+							initializerKey,
+							decoratorName,
+							metadata: this.toJsonSafeValue(metadata),
+						});
 						continue;
+					}
 
 					const httpState = rollUpHttpDecoratorState(
 						decoratorState.root,
@@ -57,6 +77,19 @@ export class ModuleGraphRouteCollector {
 								controller: controller.name,
 								handler: String(methodName),
 								schema: this.getRequestSchema(httpState.schema),
+							});
+							this.addEntrypoint(module, {
+								type: "http",
+								label: `${method} ${path}`,
+								controller: controller.name,
+								handler: String(methodName),
+								initializerKey,
+								decoratorName: method,
+								metadata: {
+									method,
+									path,
+									schema: this.getRequestSchema(httpState.schema),
+								},
 							});
 						}
 					}
@@ -81,8 +114,80 @@ export class ModuleGraphRouteCollector {
 		node.routes.push(route);
 	}
 
+	private addEntrypoint(module: M, entrypoint: ModuleGraphEntrypoint): void {
+		const id = this.options.getOrCreateModule(module);
+		const node = this.options.getModuleNode(id);
+
+		if (!node) return;
+
+		const entrypointKey = this.getEntrypointKey(entrypoint);
+		if (
+			node.entrypoints.some(
+				(existing) => this.getEntrypointKey(existing) === entrypointKey,
+			)
+		) {
+			return;
+		}
+
+		node.entrypoints.push(entrypoint);
+	}
+
 	private getRouteKey(route: ModuleGraphRoute): string {
 		return `${route.method}:${route.path}:${route.controller}:${route.handler}`;
+	}
+
+	private getEntrypointKey(entrypoint: ModuleGraphEntrypoint): string {
+		return `${entrypoint.type}:${entrypoint.label}:${entrypoint.controller}:${entrypoint.handler}:${entrypoint.initializerKey}`;
+	}
+
+	private formatEntrypointLabel(type: string, metadata: unknown): string {
+		const metadataName = getMetadataName(metadata);
+
+		return metadataName ?? type;
+	}
+
+	private toJsonSafeValue(
+		value: unknown,
+		seen = new WeakSet<object>(),
+	): unknown {
+		if (typeof value === "function") {
+			if (seen.has(value)) return "[Circular]";
+
+			seen.add(value);
+
+			const staticEntries = Object.entries(value).map(([key, item]) => [
+				key,
+				this.toJsonSafeValue(item, seen),
+			]);
+
+			return {
+				name: value.name || "anonymous",
+				...Object.fromEntries(staticEntries),
+			};
+		}
+
+		if (!value || typeof value !== "object") {
+			return value;
+		}
+
+		if (Array.isArray(value)) {
+			if (seen.has(value)) return "[Circular]";
+
+			seen.add(value);
+
+			return value.map((item) => this.toJsonSafeValue(item, seen));
+		}
+
+		if (seen.has(value)) return "[Circular]";
+
+		seen.add(value);
+
+		return Object.fromEntries(
+			Object.entries(value).map(([key, item]) => [
+				key,
+				this.toJsonSafeValue(item, seen),
+			]),
+		);
 	}
 
 	private getRequestSchema(schema: RouteSchema): ModuleGraphRoute["schema"] {
@@ -95,4 +200,30 @@ export class ModuleGraphRouteCollector {
 
 		return Object.keys(requestSchema).length > 0 ? requestSchema : undefined;
 	}
+}
+
+function getEntrypointType(description: string | undefined): string {
+	return description?.replace(/^DecoratorState:/, "") || "decorator";
+}
+
+function getMetadataName(metadata: unknown): string | null {
+	if (typeof metadata === "function") {
+		return metadata.name || null;
+	}
+
+	if (!metadata || typeof metadata !== "object") {
+		return null;
+	}
+
+	const value = metadata as {
+		name?: unknown;
+		queueName?: unknown;
+		routingKey?: unknown;
+	};
+
+	if (typeof value.name === "string") return value.name;
+	if (typeof value.queueName === "string") return value.queueName;
+	if (typeof value.routingKey === "string") return value.routingKey;
+
+	return null;
 }

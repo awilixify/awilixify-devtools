@@ -1,9 +1,11 @@
 import { defineConfig } from "orval";
 
+const devtoolsApiUrl = process.env.DEVTOOLS_API_URL ?? "http://127.0.0.1:3001";
+
 export default defineConfig({
 	devtools: {
 		input: {
-			target: "http://127.0.0.1:3001/api-docs/json",
+			target: `${devtoolsApiUrl}/api-docs/json`,
 			override: {
 				transformer: (swaggerDocument) => {
 					// Flatten anyOf: [type, null] to type with nullable: true
@@ -52,7 +54,7 @@ export default defineConfig({
 			formatter: "biome",
 			mode: "tags-split",
 			clean: true,
-			baseUrl: "http://127.0.0.1:3001",
+			baseUrl: "",
 		},
 	},
 });

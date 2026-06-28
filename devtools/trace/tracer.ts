@@ -1,15 +1,27 @@
+import path from "node:path";
 import * as Awilix from "awilix";
 import type {
 	Tracer as ITracer,
 	RecordSpanInput,
-	RunInControllerTraceInput,
 	WrapResolverInput,
 } from "awilixify/devtools";
 import { isPromiseLike } from "awilixify/devtools";
-import { DevtoolsTraceStore } from "./store.js";
+import type { Deps } from "../devtools.module.js";
+import {
+	DevtoolsTraceStore,
+	type TraceCreationListenerInput,
+} from "./store.js";
+
+const DEFAULT_TRACE_HISTORY_FILE = ".awilixify-devtools/traces.json";
 
 export class Tracer implements ITracer {
-	private readonly traceStore = new DevtoolsTraceStore();
+	private readonly traceStore: DevtoolsTraceStore;
+
+	constructor(options: Deps["options"]) {
+		this.traceStore = new DevtoolsTraceStore(
+			resolveTraceHistoryFile(options.traceHistoryFile),
+		);
+	}
 
 	getTraces() {
 		return this.traceStore.getTraces();
@@ -17,6 +29,14 @@ export class Tracer implements ITracer {
 
 	getTrace(traceId: string) {
 		return this.traceStore.getTrace(traceId);
+	}
+
+	clearTraces() {
+		this.traceStore.clearTraces();
+	}
+
+	deleteTrace(traceId: string) {
+		return this.traceStore.deleteTrace(traceId);
 	}
 
 	recordSpan<T>(input: RecordSpanInput<T>): T | Promise<T> {
@@ -27,7 +47,9 @@ export class Tracer implements ITracer {
 		return this.traceStore.runInCurrentSpan(callback);
 	}
 
-	runInControllerTrace<T>(input: RunInControllerTraceInput<T>): T | Promise<T> {
+	runInControllerTrace<T>(
+		input: TraceCreationListenerInput<T>,
+	): T | Promise<T> {
 		return this.traceStore.runInControllerTrace(input);
 	}
 
@@ -47,12 +69,13 @@ export class Tracer implements ITracer {
 	}
 
 	private createTracedInstance<T>({
+		className,
 		instance,
 		isFactory = false,
 		kind,
 		module,
 		moduleId,
-		providerKey,
+		registrationKey,
 	}: WrapResolverInput & {
 		instance: T;
 	}): T {
@@ -73,6 +96,28 @@ export class Tracer implements ITracer {
 				if (propertyKey === "constructor") return value;
 				if (isConstructor(value)) return value;
 
+				if (kind === "prehandler" && propertyKey === "execute") {
+					return (...args: unknown[]) => {
+						try {
+							const result = value.apply(proxyReceiver, args);
+
+							if (isPromiseLike(result)) {
+								return result.catch((error: unknown) => {
+									if (!isPrivateMemberAccessError(error)) throw error;
+
+									return value.apply(target, args);
+								});
+							}
+
+							return result;
+						} catch (error) {
+							if (!isPrivateMemberAccessError(error)) throw error;
+
+							return value.apply(target, args);
+						}
+					};
+				}
+
 				const existing = wrappers.get(propertyKey);
 				if (existing) return existing;
 
@@ -82,7 +127,8 @@ export class Tracer implements ITracer {
 						kind,
 						moduleId,
 						moduleName: module.name,
-						providerKey,
+						className,
+						registrationKey,
 						methodName,
 						args,
 						callback: () => {
@@ -129,6 +175,14 @@ export class Tracer implements ITracer {
 			},
 		});
 	}
+}
+
+function resolveTraceHistoryFile(
+	traceHistoryFile: string | false | undefined,
+): string | null {
+	if (traceHistoryFile === false) return null;
+
+	return path.resolve(traceHistoryFile ?? DEFAULT_TRACE_HISTORY_FILE);
 }
 
 function isConstructor(value: { prototype?: unknown }): boolean {

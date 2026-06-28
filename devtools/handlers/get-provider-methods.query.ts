@@ -32,7 +32,9 @@ export class GetProviderMethodsQueryHandler
 					.find((module) => module?.exports?.includes(payload.providerKey))
 					?.providers?.[payload.providerKey];
 
-		const useClass = this.getProviderClass(providerDefinition);
+		const useClass =
+			this.getProviderClass(providerDefinition) ??
+			this.findHandlerClass(scopeModule, payload.providerKey);
 
 		return {
 			methods: (useClass
@@ -40,6 +42,31 @@ export class GetProviderMethodsQueryHandler
 				: []
 			).sort((a, b) => a.localeCompare(b)),
 		};
+	}
+
+	// Query/command handlers are registered in the module scope under their
+	// class name, so the playground can invoke them like any other provider.
+	private findHandlerClass(
+		scopeModule: ReturnType<Deps["graphCollector"]["getModule"]>,
+		providerKey: string,
+	): Constructor<object> | null {
+		const handlers = [
+			...(scopeModule?.queryHandlers ?? []),
+			...(scopeModule?.commandHandlers ?? []),
+		];
+
+		for (const handler of handlers) {
+			const handlerClass = hasUseClass(handler) ? handler.useClass : handler;
+
+			if (
+				typeof handlerClass === "function" &&
+				handlerClass.name === providerKey
+			) {
+				return handlerClass as Constructor<object>;
+			}
+		}
+
+		return null;
 	}
 
 	private getProviderClass(

@@ -15,8 +15,6 @@ export function getSpanColor(kind: TraceSpan["kind"]) {
 	switch (kind) {
 		case "controller":
 			return "teal";
-		case "initializer":
-			return "grape";
 		case "provider":
 			return "blue";
 		case "mediator":

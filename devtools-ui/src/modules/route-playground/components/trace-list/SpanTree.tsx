@@ -10,10 +10,13 @@ import {
 	ScrollArea,
 	Stack,
 	Text,
+	Tooltip,
 } from "@mantine/core";
 import { useEffect, useMemo, useState } from "react";
 import type { TraceSpan } from "@/api/model/index.js";
-import { getSpanColor } from "../trace-tree/traceFormatting";
+import { getErrorBadgeLabel, getOriginErrorSpanIds } from "./errorOrigin";
+import { MethodName } from "./MethodName";
+import { ProviderBadge } from "./ProviderBadge";
 import { getDisplayArgs } from "./SpanDetails";
 
 type SpanTreeNode = TraceSpan & {
@@ -57,6 +60,21 @@ export function SpanTree({ onSelect, selectedSpanId, spans }: SpanTreeProps) {
 
 		return roots;
 	}, [spans]);
+	const parentSpanIds = useMemo(() => {
+		const ids = new Set<string>();
+
+		for (const span of spans) {
+			if (span.parentId) {
+				ids.add(span.parentId);
+			}
+		}
+
+		return ids;
+	}, [spans]);
+	const originErrorSpanIds = useMemo(
+		() => getOriginErrorSpanIds(spans),
+		[spans],
+	);
 	const rootIds = useMemo(() => spanTree.map((span) => span.id), [spanTree]);
 	const expandableIds = useMemo(
 		() => getExpandableSpanIds(spanTree),
@@ -94,8 +112,15 @@ export function SpanTree({ onSelect, selectedSpanId, spans }: SpanTreeProps) {
 	}) => {
 		const selected = selectedSpanId === span.id;
 		const hasChildren = span.children.length > 0;
+		const hasTraceChildren = parentSpanIds.has(span.id);
 		const expanded = expandedSpanIds.has(span.id);
 		const decoratorInfo = getInterceptorDecoratorInfo(span);
+		const errorTone =
+			span.status === "error"
+				? originErrorSpanIds.has(span.id)
+					? "origin"
+					: "propagated"
+				: undefined;
 
 		return (
 			<Stack gap={4}>
@@ -128,30 +153,44 @@ export function SpanTree({ onSelect, selectedSpanId, spans }: SpanTreeProps) {
 					) : (
 						<Box h={22} w={22} />
 					)}
-					<Badge
-						styles={{ label: { textTransform: "none" } }}
-						color={getSpanColor(span.kind)}
-						size="sm"
-						variant="light"
-					>
-						{span.providerKey}
-					</Badge>
+					<ProviderBadge span={span} spans={spans} />
 					{decoratorInfo && (
 						<DecoratorBadge
 							decoratorName={decoratorInfo.decoratorName}
 							metadata={decoratorInfo.metadata}
 						/>
 					)}
+					{errorTone && (
+						<Badge
+							color={"red"}
+							size="xs"
+							variant={errorTone === "origin" ? "filled" : "light"}
+						>
+							{getErrorBadgeLabel(errorTone, span.errorKind)}
+						</Badge>
+					)}
 					<MethodName
 						methodName={span.methodName}
 						args={getDisplayArgs(span)}
 					/>
-					<Text c="dimmed" ml="auto" size="xs">
-						{Math.round(span.durationMs)} ms
-					</Text>
+					<Group gap={4} ml="auto" wrap="nowrap">
+						<Text c="dimmed" fs="italic" fw={700} size="xs">
+							{Math.round(span.selfDurationMs)} ms
+						</Text>
+						{hasTraceChildren && (
+							<>
+								<Text c="dimmed" size="xs">
+									/
+								</Text>
+								<Text c="dimmed" size="xs">
+									{Math.round(span.durationMs)} ms
+								</Text>
+							</>
+						)}
+					</Group>
 				</Group>
 				{hasChildren && (
-					<Collapse in={expanded}>
+					<Collapse expanded={expanded}>
 						<SpanChildren parentModuleName={moduleName} spans={span.children} />
 					</Collapse>
 				)}
@@ -201,23 +240,57 @@ export function SpanTree({ onSelect, selectedSpanId, spans }: SpanTreeProps) {
 
 	return (
 		<Stack gap={6} style={{ height: "100%", minHeight: 0 }}>
-			<Group gap="xs" justify="flex-end">
-				<Button
-					disabled={expandableIds.length === 0}
-					onClick={expandAll}
-					size="xs"
-					variant="subtle"
+			<Group gap="xs" justify="space-between" pr="xl">
+				<Group gap="xs">
+					<Button
+						disabled={expandableIds.length === 0}
+						onClick={expandAll}
+						size="xs"
+						variant="subtle"
+					>
+						Expand all
+					</Button>
+					<Button
+						disabled={expandableIds.length === 0}
+						onClick={collapseAll}
+						size="xs"
+						variant="subtle"
+					>
+						Collapse all
+					</Button>
+				</Group>
+				<Tooltip
+					label={
+						<Stack gap={4}>
+							<Text size="xs">
+								<Text span fs="italic" fw={700}>
+									First value
+								</Text>{" "}
+								excludes direct child calls.
+							</Text>
+							<Text size="xs">
+								Second value, when shown, is how long the whole span took.
+							</Text>
+							<Text size="xs">
+								Trace duration and span totals can differ from adding child
+								spans because time between child calls may include Node.js,
+								framework work, or untracked code.
+							</Text>
+						</Stack>
+					}
+					multiline
+					w={320}
+					withArrow
 				>
-					Expand all
-				</Button>
-				<Button
-					disabled={expandableIds.length === 0}
-					onClick={collapseAll}
-					size="xs"
-					variant="subtle"
-				>
-					Collapse all
-				</Button>
+					<ActionIcon
+						aria-label="Trace timing help"
+						color="gray"
+						size="sm"
+						variant="subtle"
+					>
+						<InfoIcon />
+					</ActionIcon>
+				</Tooltip>
 			</Group>
 			<ScrollArea
 				style={{ flex: 1, height: "100%", minHeight: 0 }}
@@ -227,6 +300,26 @@ export function SpanTree({ onSelect, selectedSpanId, spans }: SpanTreeProps) {
 				<SpanChildren isRoot parentModuleName={null} spans={spanTree} />
 			</ScrollArea>
 		</Stack>
+	);
+}
+
+function InfoIcon() {
+	return (
+		<svg
+			aria-hidden="true"
+			fill="none"
+			height="14"
+			stroke="currentColor"
+			strokeLinecap="round"
+			strokeLinejoin="round"
+			strokeWidth="2"
+			viewBox="0 0 24 24"
+			width="14"
+		>
+			<circle cx="12" cy="12" r="10" />
+			<path d="M12 16v-4" />
+			<path d="M12 8h.01" />
+		</svg>
 	);
 }
 
@@ -272,64 +365,6 @@ function groupSpansByModule(
 	}
 
 	return groups;
-}
-
-function formatMethodCall(methodName: string, args: unknown[]): string {
-	if (!args || args.length === 0) return `${methodName}()`;
-
-	const formattedArgs = args
-		.map((arg) => JSON.stringify(arg, null, 2))
-		.join(", ");
-
-	return `${methodName}(${formattedArgs})`;
-}
-
-function MethodName({
-	methodName,
-	args,
-}: {
-	methodName: string;
-	args: unknown[];
-}) {
-	const hasArgs = args && args.length > 0;
-
-	if (!hasArgs) {
-		return (
-			<Text size="sm" style={{ minWidth: 0 }}>
-				{methodName}
-				<Text span c="dimmed">
-					()
-				</Text>
-			</Text>
-		);
-	}
-
-	return (
-		<HoverCard shadow="md" position="bottom-start" withArrow>
-			<HoverCard.Target>
-				<Text size="sm" style={{ minWidth: 0, cursor: "help" }}>
-					{methodName}
-					<Text span c="dimmed">
-						(...)
-					</Text>
-				</Text>
-			</HoverCard.Target>
-			<HoverCard.Dropdown
-				style={{
-					maxWidth: 600,
-					maxHeight: 300,
-					overflow: "auto",
-					background: "var(--mantine-color-gray-0)",
-				}}
-			>
-				<CodeHighlight
-					code={formatMethodCall(methodName, args)}
-					language="typescript"
-					withCopyButton={false}
-				/>
-			</HoverCard.Dropdown>
-		</HoverCard>
-	);
 }
 
 type InterceptorDecoratorInfo = {
