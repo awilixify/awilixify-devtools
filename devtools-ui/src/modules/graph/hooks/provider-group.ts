@@ -178,7 +178,7 @@ export function getImportedProviderGroups(
 
 // Class names for interceptors/initializers/middlewares are carried by the graph
 // payload but aren't all in the generated client type yet (pending
-// `npm run generate:api` in some places), so they're read through this cast.
+// `pnpm generate:api` in some places), so they're read through this cast.
 type MemberSourceModule = ModuleGraphNode & {
 	interceptorClassNames?: Record<string, string>;
 	interceptorDecoratorNames?: Record<string, string[]>;

@@ -2,10 +2,10 @@ import path from "node:path";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
-const devtoolsApiUrl = process.env.DEVTOOLS_API_URL ?? "http://127.0.0.1:3001";
+const devtoolsApiUrl = process.env.DEVTOOLS_API_URL ?? "http://127.0.0.1:3221";
 
 export default defineConfig({
-	root: "devtools-ui",
+	root: __dirname,
 	plugins: [react()],
 	resolve: {
 		alias: {
@@ -14,9 +14,10 @@ export default defineConfig({
 	},
 	build: {
 		emptyOutDir: true,
-		outDir: "../dist/devtools-ui",
+		outDir: "dist",
 	},
 	server: {
+		port: 3222,
 		proxy: {
 			"/__devtools": {
 				target: devtoolsApiUrl,

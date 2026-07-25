@@ -52,7 +52,7 @@ export class DevtoolsServer {
 		this.registerAppProxy();
 
 		const host = this.options.host ?? "127.0.0.1";
-		const port = this.options.port ?? 3001;
+		const port = this.options.port ?? 3221;
 
 		await this.fastify.listen({
 			host,

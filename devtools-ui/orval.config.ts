@@ -1,6 +1,6 @@
 import { defineConfig } from "orval";
 
-const devtoolsApiUrl = process.env.DEVTOOLS_API_URL ?? "http://127.0.0.1:3001";
+const devtoolsApiUrl = process.env.DEVTOOLS_API_URL ?? "http://127.0.0.1:3221";
 
 export default defineConfig({
 	devtools: {
@@ -48,8 +48,8 @@ export default defineConfig({
 					includeHttpResponseReturnType: false,
 				},
 			},
-			target: "./devtools-ui/src/api/devtools.ts",
-			schemas: "./devtools-ui/src/api/model",
+			target: "./src/api/devtools.ts",
+			schemas: "./src/api/model",
 			client: "react-query",
 			formatter: "biome",
 			mode: "tags-split",

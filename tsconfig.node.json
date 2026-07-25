@@ -1,11 +1,12 @@
 {
-  "compilerOptions": {
-    "composite": true,
-    "skipLibCheck": true,
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
-    "allowSyntheticDefaultImports": true,
-    "strict": true
-  },
-  "include": ["devtools-ui/vite.config.ts"]
+	"compilerOptions": {
+		"composite": true,
+		"skipLibCheck": true,
+		"module": "ESNext",
+		"moduleResolution": "Bundler",
+		"allowSyntheticDefaultImports": true,
+		"outDir": "dist/config",
+		"strict": true
+	},
+	"include": ["devtools-ui/vite.config.ts", "devtools-ui/orval.config.ts"]
 }

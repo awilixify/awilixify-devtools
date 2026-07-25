@@ -26,7 +26,7 @@ pnpm dev
 ```
 
 The application runs at `http://localhost:3000` and its DevTools API runs at
-`http://127.0.0.1:3001`.
+`http://127.0.0.1:3221`.
 
 From the `awilixify-devtools` repository, start the UI in another terminal:
 
@@ -36,8 +36,8 @@ pnpm build:devtools
 pnpm dev
 ```
 
-Open `http://localhost:5173`. Vite proxies relative `/__devtools` requests to
-`http://127.0.0.1:3001`, preserving hot reload, source maps, browser
+Open `http://localhost:3222`. Vite proxies relative `/__devtools` requests to
+`http://127.0.0.1:3221`, preserving hot reload, source maps, browser
 breakpoints, and React DevTools.
 
 To use another DevTools API:
@@ -46,9 +46,10 @@ To use another DevTools API:
 DEVTOOLS_API_URL=http://127.0.0.1:4001 pnpm dev
 ```
 
-The same variable can be used when regenerating the API client:
+Run API generation from the UI package:
 
 ```sh
+cd devtools-ui
 DEVTOOLS_API_URL=http://127.0.0.1:4001 pnpm generate:api
 ```
 
