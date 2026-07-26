@@ -37,8 +37,8 @@ importers:
         specifier: ^22.15.21
         version: 22.19.21
       awilixify:
-        specifier: file:../awilixify
-        version: file:../awilixify(awilix@12.1.1)(react@19.2.6)
+        specifier: ^3.1.2
+        version: 3.1.2(awilix@12.1.1)(react@19.2.6)
       del-cli:
         specifier: ^7.0.0
         version: 7.0.0
@@ -1080,8 +1080,8 @@ packages:
     resolution: {integrity: sha512-A93ak7Ypot8YlkfulCBL4GCkZozuwdfwOJs+4l8+svJYCfXKuokLxWe/usTiatN1dlPOdT5HO0MBpNNTzZSWug==}
     engines: {node: '>=16.3.0'}
 
-  awilixify@file:../awilixify:
-    resolution: {directory: ../awilixify, type: directory}
+  awilixify@3.1.2:
+    resolution: {integrity: sha512-tBkKBjMA80v86OP2iO7ivUFZKYnWrUrSroFWMY/IGJisUMf86D0HFJ65uycBmMnFKiGEdV6sdygF/JAHk8fZqw==}
     peerDependencies:
       awilix: '>=9.0.0'
       react: '>=18.0.0 || >=19.0.0'
@@ -2885,7 +2885,7 @@ snapshots:
     dependencies:
       fast-glob: 3.3.3
 
-  awilixify@file:../awilixify(awilix@12.1.1)(react@19.2.6):
+  awilixify@3.1.2(awilix@12.1.1)(react@19.2.6):
     dependencies:
       awilix: 12.1.1
     optionalDependencies:
