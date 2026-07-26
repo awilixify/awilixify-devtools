@@ -41,6 +41,10 @@ export default defineConfig({
 		},
 		output: {
 			override: {
+				mutator: {
+					path: "./src/devtools-fetch.ts",
+					name: "devtoolsFetch",
+				},
 				query: {
 					useSuspenseQuery: true,
 				},

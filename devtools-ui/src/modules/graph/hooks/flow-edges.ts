@@ -1,7 +1,15 @@
 import { MarkerType } from "@xyflow/react";
 import clsx from "clsx";
 import type { GetGraphResponse } from "@/api/model";
+import {
+	MODULE_SOURCE_HANDLE_ID,
+	MODULE_TARGET_HANDLE_ID,
+} from "../operation-handles";
 import type { GraphViewMode, ModuleEdgeRole, ModuleFlowEdge } from "../types";
+import {
+	getModuleEdgeId,
+	type ModuleSelectionRelations,
+} from "./module-selection-relations";
 import {
 	getProviderGroupColorByModuleId,
 	isFocusedDependencyEdge,
@@ -9,10 +17,12 @@ import {
 
 export function toFlowEdges({
 	edges,
+	selectionRelations,
 	selectedModuleId,
 	viewMode,
 }: {
 	edges: GetGraphResponse["edges"];
+	selectionRelations: ModuleSelectionRelations;
 	selectedModuleId?: string | null;
 	viewMode: GraphViewMode;
 }): ModuleFlowEdge[] {
@@ -27,7 +37,7 @@ export function toFlowEdges({
 	return edges.map((edge) => {
 		const role = getEdgeRole({
 			edge,
-			selectedModuleId,
+			selectionRelations,
 			cycleEdgeIds,
 		});
 		// Same full color as the highlighted entry chips of the group this edge
@@ -44,10 +54,12 @@ export function toFlowEdges({
 			sourceHandle:
 				viewMode === "providers"
 					? getProviderGroupHandleId(edge.to)
-					: undefined,
+					: MODULE_SOURCE_HANDLE_ID,
 			target: edge.to,
 			targetHandle:
-				viewMode === "providers" ? getOwnProviderGroupHandleId() : undefined,
+				viewMode === "providers"
+					? getOwnProviderGroupHandleId()
+					: MODULE_TARGET_HANDLE_ID,
 			type: "moduleDependency",
 			animated: role === "cycle" || edge.type === "global",
 			markerEnd: {
@@ -56,7 +68,12 @@ export function toFlowEdges({
 				width: 10,
 				height: 10,
 			},
-			data: { color, type: edge.type, role },
+			data: {
+				color,
+				kind: "module",
+				type: edge.type,
+				role,
+			},
 			className: clsx("graph-edge", edge.type, role, {
 				"provider-colored": color,
 			}),
@@ -108,19 +125,23 @@ function getEdgeColor(role: ModuleEdgeRole): string {
 
 function getEdgeRole({
 	edge,
-	selectedModuleId,
+	selectionRelations,
 	cycleEdgeIds,
 }: {
 	edge: GetGraphResponse["edges"][number];
-	selectedModuleId?: string | null;
+	selectionRelations: ModuleSelectionRelations;
 	cycleEdgeIds: Set<string>;
 }): ModuleEdgeRole {
 	const edgeId = `${edge.from}:${edge.to}:${edge.type}`;
 
 	if (cycleEdgeIds.has(edgeId)) return "cycle";
 	if (edge.type === "global") return "global";
-	if (edge.from === selectedModuleId) return "dependency";
-	if (edge.to === selectedModuleId) return "dependent";
+	if (selectionRelations.dependencyModuleEdgeIds.has(getModuleEdgeId(edge))) {
+		return "dependency";
+	}
+	if (selectionRelations.dependentModuleEdgeIds.has(getModuleEdgeId(edge))) {
+		return "dependent";
+	}
 
 	return "default";
 }

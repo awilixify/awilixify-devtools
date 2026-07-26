@@ -2,34 +2,56 @@ import {
 	ActionIcon,
 	Badge,
 	Button,
+	Center,
+	Checkbox,
 	Group,
+	Loader,
 	Menu,
 	Paper,
+	Popover,
 	ScrollArea,
+	SegmentedControl,
 	Stack,
 	Text,
 	Tooltip,
+	UnstyledButton,
 } from "@mantine/core";
+import { useMutation, useQueries } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import fetchToCurl from "fetch-to-curl";
-import { useState } from "react";
-import { useGetDevtoolsGraphSuspense } from "@/api/graph/graph";
+import { useEffect, useRef, useState } from "react";
+import {
+	getDevtoolsGraph,
+	getGetDevtoolsGraphQueryKey,
+	useGetDevtoolsGraphSuspense,
+} from "@/api/graph/graph";
 import type { GetGraphResponse, Trace } from "@/api/model";
 import {
-	usePostDevtoolsPlaygroundInvoke,
-	usePostDevtoolsPlaygroundInvokeHandler,
+	postDevtoolsPlaygroundInvoke,
+	postDevtoolsPlaygroundInvokeHandler,
 } from "@/api/playground/playground";
 import { useGetDevtoolsSettings } from "@/api/settings/settings";
 import {
-	useDeleteDevtoolsTraces,
-	useDeleteDevtoolsTracesTraceId,
-	useGetDevtoolsTraces,
+	deleteDevtoolsTraces,
+	deleteDevtoolsTracesTraceId,
+	getDevtoolsTraces,
 } from "@/api/traces/traces";
+import { withDevtoolsBasePath } from "@/devtools-fetch";
 import type { GraphRouteSearch } from "../../app/router";
+import {
+	getServiceBackgroundColor,
+	getServiceBorderColor,
+	getServiceColor,
+} from "../../graph/service-colors";
+import { useTargets } from "../../targets/TargetsContext";
+import { getTargetAppPath } from "../../targets/target-routing";
+import { getEntryTracesQueryKey, rerunTraceMutationKey } from "../entry-traces";
 import { getMethodColor, getStatusCodeColor } from "../http-method-color";
 import type { RoutePlaygroundSearch } from "../route";
 import {
-	getTraceKindLabel,
+	getEntrypointBadgeColor,
+	getEntrypointBadgeLabel,
+	getEntrypointListenerName,
 	getTraceOutcome,
 	isEntrypointTrace,
 	isHttpTrace,
@@ -38,6 +60,7 @@ import {
 import { packDefinedFields, packUrlState } from "../url-state";
 import {
 	RoutePlaygroundModes,
+	type TraceHistoryMode,
 	useRoutePlaygroundSettings,
 } from "../use-route-playground-settings";
 import { CopyIcon } from "./CopyIcon";
@@ -56,9 +79,78 @@ type ProviderCall = {
 
 export function TraceHistoryPaper() {
 	const navigate = useNavigate({ from: "/routes" });
-	const { selectedTraceId, setSelectedTraceId } = useRoutePlaygroundSettings();
-	const { data: traces = [], refetch } = useGetDevtoolsTraces();
+	const { selectTarget, targets } = useTargets();
+	const {
+		selectedTraceId,
+		selectedTraceScope,
+		setSelectedTraceId,
+		setTraceHistoryMode,
+		traceHistoryMode,
+	} = useRoutePlaygroundSettings();
+	const traceQueries = useQueries({
+		queries: targets.map((target) => ({
+			queryKey: getEntryTracesQueryKey(target.serviceName),
+			queryFn: ({ signal }: { signal: AbortSignal }) =>
+				getDevtoolsTraces(withDevtoolsBasePath(target.basePath, { signal })),
+			// New traces (incl. async distributed legs) are pushed via the SSE
+			// stream (useTraceStream), so no polling or window-focus refetch.
+			refetchOnWindowFocus: false,
+		})),
+	});
+	const [selectedServices, setSelectedServices] = useState(
+		() => new Set(targets.map((target) => target.serviceName)),
+	);
+	const allTraces = traceQueries
+		.flatMap((query) => query.data ?? [])
+		.sort((a, b) => b.startedAt - a.startedAt);
+	const traces = allTraces.filter((trace) =>
+		selectedServices.has(trace.serviceName),
+	);
+	const loadingTraces =
+		traces.length === 0 && traceQueries.some((query) => query.isPending);
+	// By-service view groups only the selected services' entries. Merged view
+	// groups the complete distributed traces first, then keeps any whose flow
+	// touches at least one selected service, so a cross-service trace stays
+	// visible as long as one of its services is checked.
+	const serviceDistributedTraces = groupDistributedTraces(traces);
+	const mergedDistributedTraces = groupDistributedTraces(allTraces).filter(
+		(group) => group.services.some((service) => selectedServices.has(service)),
+	);
+	// A playground run or rerun selects the newest trace, which — since history is
+	// sorted newest-first — is the top group. When that happens, scroll the list
+	// up so the freshly selected trace is actually visible instead of hidden below
+	// a scrolled-down viewport. Ordinary clicks on lower items don't match.
+	const viewportRef = useRef<HTMLDivElement>(null);
+	const topTraceId =
+		(traceHistoryMode === "merged"
+			? mergedDistributedTraces
+			: serviceDistributedTraces)[0]?.rootTrace.id ?? null;
+	useEffect(() => {
+		if (selectedTraceId && selectedTraceId === topTraceId) {
+			viewportRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+		}
+	}, [selectedTraceId, topTraceId]);
 	const { data: graph } = useGetDevtoolsGraphSuspense();
+	// Replay resolves a trace against its own service's graph, not just the
+	// active target's, so cross-service distributed legs (e.g. RabbitMQ listeners
+	// running in another service) still expose Rerun / Open actions.
+	const graphQueries = useQueries({
+		queries: targets.map((target) => ({
+			queryKey: [...getGetDevtoolsGraphQueryKey(), target.serviceName],
+			queryFn: ({ signal }: { signal: AbortSignal }) =>
+				getDevtoolsGraph(withDevtoolsBasePath(target.basePath, { signal })),
+			refetchOnWindowFocus: false,
+		})),
+	});
+	const graphsByService = new Map(
+		targets.map((target, index) => [
+			target.serviceName,
+			graphQueries[index]?.data,
+		]),
+	);
+	// Falls back to the active target's graph until a service's graph has loaded.
+	const graphForTrace = (trace: Trace): GetGraphResponse =>
+		graphsByService.get(trace.serviceName) ?? graph;
 	const { data: settings } = useGetDevtoolsSettings();
 	const appUrl = settings?.appUrl?.replace(/\/$/, "") ?? "";
 
@@ -67,24 +159,84 @@ export function TraceHistoryPaper() {
 	const [copiedCurlTraceId, setCopiedCurlTraceId] = useState<string | null>(
 		null,
 	);
+	const [copiedDistributedTraceId, setCopiedDistributedTraceId] = useState<
+		string | null
+	>(null);
 
-	const deleteTraces = useDeleteDevtoolsTraces({
-		mutation: {
-			onSuccess: () => {
-				setSelectedTraceId(null);
-				refetch();
-			},
+	const refreshTraces = async (): Promise<Trace[]> => {
+		const results = await Promise.all(
+			traceQueries.map((query) => query.refetch()),
+		);
+
+		return results
+			.flatMap((result) => result.data ?? [])
+			.sort((a, b) => b.startedAt - a.startedAt);
+	};
+
+	const clearTraces = useMutation({
+		mutationFn: () =>
+			Promise.all(
+				targets
+					.filter((target) => selectedServices.has(target.serviceName))
+					.map((target) =>
+						deleteDevtoolsTraces(withDevtoolsBasePath(target.basePath)),
+					),
+			),
+		onSuccess: () => {
+			setSelectedTraceId(null);
+			refreshTraces();
 		},
 	});
 
-	const deleteTrace = useDeleteDevtoolsTracesTraceId({
-		mutation: {
-			onSuccess: (_response, variables) => {
-				if (selectedTraceId === variables.traceId) {
-					setSelectedTraceId(null);
-				}
-				refetch();
-			},
+	const deleteTrace = useMutation({
+		mutationFn: ({
+			serviceName,
+			traceId,
+		}: {
+			serviceName: string;
+			traceId: string;
+		}) => {
+			const target = targets.find(
+				(candidate) => candidate.serviceName === serviceName,
+			);
+			if (!target) throw new Error(`Unknown service "${serviceName}"`);
+
+			return deleteDevtoolsTracesTraceId(
+				traceId,
+				withDevtoolsBasePath(target.basePath),
+			);
+		},
+		onSuccess: (_response, variables) => {
+			if (selectedTraceId === variables.traceId) {
+				setSelectedTraceId(null);
+			}
+			refreshTraces();
+		},
+	});
+
+	// Deletes every service trace that makes up a distributed trace, so the whole
+	// row disappears in one action instead of leaving orphaned entries behind.
+	const deleteDistributedTrace = useMutation({
+		mutationFn: (group: DistributedTraceGroup) =>
+			Promise.all(
+				group.traces.map((trace) => {
+					const target = targets.find(
+						(candidate) => candidate.serviceName === trace.serviceName,
+					);
+					if (!target)
+						throw new Error(`Unknown service "${trace.serviceName}"`);
+
+					return deleteDevtoolsTracesTraceId(
+						trace.id,
+						withDevtoolsBasePath(target.basePath),
+					);
+				}),
+			),
+		onSuccess: (_response, group) => {
+			if (group.traces.some((trace) => trace.id === selectedTraceId)) {
+				setSelectedTraceId(null);
+			}
+			refreshTraces();
 		},
 	});
 
@@ -99,7 +251,7 @@ export function TraceHistoryPaper() {
 		event.stopPropagation();
 
 		const url = trace.url.startsWith("/") ? `${appUrl}${trace.url}` : trace.url;
-		const headers = getRecordedHeaders(trace);
+		const headers = getReplayHeaders(trace);
 		const body =
 			trace.request.body === undefined
 				? undefined
@@ -118,118 +270,150 @@ export function TraceHistoryPaper() {
 		window.setTimeout(() => setCopiedCurlTraceId(null), 1200);
 	};
 
-	const selectNewTrace = async (response: { traceId: string }) => {
-		await refetch();
-		setSelectedTraceId(response.traceId);
+	// Copies the whole distributed trace (every service trace in start order) so
+	// the clipboard holds the full end-to-end flow, not just one service leg.
+	const copyDistributedTrace = async (
+		group: DistributedTraceGroup,
+		event: React.MouseEvent,
+	) => {
+		event.stopPropagation();
+		await navigator.clipboard.writeText(JSON.stringify(group.traces, null, 2));
+		setCopiedDistributedTraceId(group.id);
+		window.setTimeout(() => setCopiedDistributedTraceId(null), 1200);
 	};
 
-	const rerunInvokeMutation = usePostDevtoolsPlaygroundInvoke({
-		mutation: { onSuccess: selectNewTrace },
-	});
-	const rerunHandlerMutation = usePostDevtoolsPlaygroundInvokeHandler({
-		mutation: { onSuccess: selectNewTrace },
-	});
+	const selectNewTrace = async (response: { traceId: string }) => {
+		await refreshTraces();
+		// A rerun re-executes the whole flow, so select the full distributed trace
+		// — it then stays a full-group selection when switching history tabs.
+		// Late distributed legs arrive via the SSE trace stream, so no polling.
+		setSelectedTraceId(response.traceId, "full");
+	};
 
 	// Re-executes the recorded invocation as-is, without a playground detour.
-	const rerunTrace = async (trace: Trace) => {
-		if (isHttpTrace(trace)) {
-			// Relative URLs go through the devtools server's app proxy, exactly
-			// like route playground requests.
-			const url = new URL(trace.url, appUrl || "http://localhost");
-			const headers = Object.fromEntries(
-				Object.entries(getRecordedHeaders(trace)).filter(
-					([key]) =>
-						!["connection", "content-length", "host"].includes(
-							key.toLowerCase(),
-						),
-				),
+	// Targets the trace's own service by base path rather than switching the
+	// global active target (which clears the query cache and blanks the whole
+	// page via the graph Suspense boundary). Selection of the resulting trace
+	// happens inside the mutation, so the shared mutation key keeps the details
+	// paper showing a spinner — not the stale trace — until the rerun resolves.
+	const rerunMutation = useMutation({
+		mutationKey: rerunTraceMutationKey,
+		mutationFn: async (trace: Trace) => {
+			const target = targets.find(
+				(candidate) => candidate.serviceName === trace.serviceName,
 			);
-			const hasBody =
-				!["GET", "HEAD"].includes(trace.method) &&
-				trace.request.body !== undefined &&
-				trace.request.body !== null;
+			if (!target) return;
 
-			await fetch(`${url.pathname}${url.search}`, {
-				method: trace.method,
-				headers,
-				body: hasBody ? JSON.stringify(trace.request.body) : undefined,
-			});
+			if (isHttpTrace(trace)) {
+				// Relative URLs go through the devtools server's app proxy, exactly
+				// like route playground requests.
+				const url = new URL(trace.url, appUrl || "http://localhost");
+				const headers = getReplayHeaders(trace);
+				const hasBody =
+					!["GET", "HEAD"].includes(trace.method) &&
+					trace.request.body !== undefined &&
+					trace.request.body !== null;
 
-			const result = await refetch();
-			const newestTrace = result.data?.[0];
-			if (newestTrace) {
-				setSelectedTraceId(newestTrace.id);
+				await fetch(getTargetAppPath(target, `${url.pathname}${url.search}`), {
+					method: trace.method,
+					headers,
+					body: hasBody ? JSON.stringify(trace.request.body) : undefined,
+				});
+
+				const refreshedTraces = await refreshTraces();
+				const newestTrace = refreshedTraces.find(
+					(candidate) => candidate.serviceName === trace.serviceName,
+				);
+				setSelectedTraceId(newestTrace ? newestTrace.id : null, "full");
+				return;
 			}
-			return;
-		}
 
-		const call = getProviderCall(trace);
-		if (!call) return;
+			const call = getTraceCall(graphForTrace(trace), trace);
+			if (!call) return;
 
-		if (trace.method === "QUERY" || trace.method === "COMMAND") {
-			const [handlerKey, payload, options] = call.args as [
-				unknown,
-				unknown,
-				(
-					| { executionContext?: unknown; includePreHandlerKeys?: unknown }
-					| undefined
-				),
-			];
+			if (trace.method === "QUERY" || trace.method === "COMMAND") {
+				const [handlerKey, payload, options] = call.args as [
+					unknown,
+					unknown,
+					(
+						| { executionContext?: unknown; includePreHandlerKeys?: unknown }
+						| undefined
+					),
+				];
 
-			if (typeof handlerKey !== "string") return;
+				if (typeof handlerKey !== "string") return;
 
-			rerunHandlerMutation.mutate({
-				data: {
+				const response = await postDevtoolsPlaygroundInvokeHandler(
+					{
+						scopeModuleId: call.scopeModuleId,
+						kind: trace.method === "QUERY" ? "query" : "command",
+						handlerKey,
+						payload,
+						...(options?.executionContext !== undefined
+							? { executionContext: options.executionContext }
+							: {}),
+						...(Array.isArray(options?.includePreHandlerKeys)
+							? {
+									includePreHandlerKeys: options.includePreHandlerKeys.filter(
+										(key): key is string => typeof key === "string",
+									),
+								}
+							: {}),
+					},
+					withDevtoolsBasePath(target.basePath),
+				);
+				await selectNewTrace(response);
+				return;
+			}
+
+			const response = await postDevtoolsPlaygroundInvoke(
+				{
 					scopeModuleId: call.scopeModuleId,
-					kind: trace.method === "QUERY" ? "query" : "command",
-					handlerKey,
-					payload,
-					...(options?.executionContext !== undefined
-						? { executionContext: options.executionContext }
-						: {}),
-					...(Array.isArray(options?.includePreHandlerKeys)
-						? {
-								includePreHandlerKeys: options.includePreHandlerKeys.filter(
-									(key): key is string => typeof key === "string",
-								),
-							}
-						: {}),
+					providerKey: call.providerKey,
+					methodName: call.methodName,
+					args: call.args,
+					traceMethod: isMiddlewareTrace(trace)
+						? "MIDDLEWARE"
+						: isEntrypointTrace(trace)
+							? "ENTRYPOINT"
+							: "INVOKE",
 				},
-			});
-			return;
-		}
+				withDevtoolsBasePath(target.basePath),
+			);
+			await selectNewTrace(response);
+		},
+	});
 
-		rerunInvokeMutation.mutate({
-			data: {
-				scopeModuleId: call.scopeModuleId,
-				providerKey: call.providerKey,
-				methodName: call.methodName,
-				args: call.args,
-				traceMethod: isMiddlewareTrace(trace)
-					? "MIDDLEWARE"
-					: isEntrypointTrace(trace)
-						? "ENTRYPOINT"
-						: "INVOKE",
-			},
-		});
+	const rerunTrace = (trace: Trace) => {
+		rerunMutation.mutate(trace);
 	};
 
 	// Replays the recorded invocation in the matching playground mode so its
 	// params can be adjusted before running.
 	const openInPlayground = (trace: Trace) => {
+		selectTarget(trace.serviceName);
+
+		const traceGraph = graphForTrace(trace);
+
+		// Each branch navigates with a fresh search object, which would otherwise
+		// reset the trace-history tab to its default. Preserve the current tab.
+		const history =
+			traceHistoryMode === "merged" ? undefined : traceHistoryMode;
+
 		if (isHttpTrace(trace)) {
-			const routeId = findTraceRouteId(graph, trace);
+			const routeId = findTraceRouteId(traceGraph, trace);
 			if (!routeId) return;
 
 			navigate({
 				to: "/routes",
 				search: {
+					history,
 					mode: RoutePlaygroundModes.route,
 					route: routeId,
 					state: packDefinedFields({
 						p: trace.request.params,
 						q: trace.request.query,
-						h: trace.request.headers,
+						h: getReplayHeaders(trace),
 						b: trace.request.body,
 					}),
 				} satisfies RoutePlaygroundSearch,
@@ -237,7 +421,7 @@ export function TraceHistoryPaper() {
 			return;
 		}
 
-		const call = getProviderCall(trace);
+		const call = getTraceCall(traceGraph, trace);
 		if (!call) return;
 
 		if (trace.method === "QUERY" || trace.method === "COMMAND") {
@@ -254,6 +438,7 @@ export function TraceHistoryPaper() {
 				to: "/routes",
 				search: {
 					handler: typeof handlerKey === "string" ? handlerKey : undefined,
+					history,
 					// Recorded traces without includePreHandlerKeys ran no
 					// pre-handlers, so replicate with an empty selection.
 					middlewares: Array.isArray(options?.includePreHandlerKeys)
@@ -270,10 +455,11 @@ export function TraceHistoryPaper() {
 			return;
 		}
 
-		if (isMiddlewareCall(graph, call)) {
+		if (isMiddlewareCall(traceGraph, call)) {
 			navigate({
 				to: "/routes",
 				search: {
+					history,
 					middleware: call.providerKey,
 					mode: RoutePlaygroundModes.middleware,
 					module: call.scopeModuleId,
@@ -287,12 +473,13 @@ export function TraceHistoryPaper() {
 			return;
 		}
 
-		const entrypoint = findEntrypointCall(graph, call);
+		const entrypoint = findEntrypointCall(traceGraph, call);
 		if (entrypoint) {
 			navigate({
 				to: "/routes",
 				search: {
 					entrypoint: formatEntrypointId(call.scopeModuleId, entrypoint),
+					history,
 					mode: RoutePlaygroundModes.entrypoint,
 					module: call.scopeModuleId,
 					state: packUrlState({ a: call.args }),
@@ -304,6 +491,7 @@ export function TraceHistoryPaper() {
 		navigate({
 			to: "/routes",
 			search: {
+				history,
 				method: call.methodName,
 				mode: RoutePlaygroundModes.provider,
 				module: call.scopeModuleId,
@@ -314,7 +502,9 @@ export function TraceHistoryPaper() {
 	};
 
 	const openInGraph = (trace: Trace) => {
-		const moduleId = findTraceGraphModuleId(graph, trace);
+		selectTarget(trace.serviceName);
+
+		const moduleId = findTraceGraphModuleId(graphForTrace(trace), trace);
 		if (!moduleId) return;
 
 		navigate({
@@ -327,7 +517,7 @@ export function TraceHistoryPaper() {
 	};
 
 	return (
-		<Paper style={{ flex: 1, minHeight: 0 }}>
+		<Paper style={{ flex: 1.25, minHeight: 420 }}>
 			<Stack gap="sm" style={{ height: "100%", minHeight: 0 }}>
 				<Group justify="space-between">
 					<Stack gap={2}>
@@ -335,15 +525,63 @@ export function TraceHistoryPaper() {
 							Trace history
 						</Text>
 						<Text c="dimmed" size="xs">
-							Last 50 calls
+							Last 50 traces per service
 						</Text>
 					</Stack>
 					<Group gap="xs">
+						<SegmentedControl
+							data={[
+								{ label: "Merged", value: "merged" },
+								{ label: "By service", value: "service" },
+							]}
+							onChange={(value) =>
+								setTraceHistoryMode(value as TraceHistoryMode)
+							}
+							size="xs"
+							value={traceHistoryMode}
+						/>
+						<Popover position="bottom-end" shadow="md" withinPortal>
+							<Popover.Target>
+								<Button size="xs" variant="default">
+									Services {selectedServices.size}/{targets.length}
+								</Button>
+							</Popover.Target>
+							<Popover.Dropdown>
+								<Stack gap="xs">
+									<Text fw={700} size="xs">
+										Services
+									</Text>
+									{targets.map((target) => (
+										<Checkbox
+											checked={selectedServices.has(target.serviceName)}
+											key={target.serviceName}
+											label={target.serviceName}
+											onChange={(event) => {
+												const { checked } = event.currentTarget;
+
+												setSelectedServices((current) => {
+													const next = new Set(current);
+
+													if (checked) {
+														next.add(target.serviceName);
+													} else {
+														next.delete(target.serviceName);
+													}
+
+													return next;
+												});
+											}}
+											size="xs"
+										/>
+									))}
+								</Stack>
+							</Popover.Dropdown>
+						</Popover>
 						<Button
 							color="red"
 							disabled={traces.length === 0}
-							loading={deleteTraces.isPending}
-							onClick={() => deleteTraces.mutate()}
+							loading={clearTraces.isPending}
+							onClick={() => clearTraces.mutate()}
 							size="xs"
 							variant="light"
 						>
@@ -359,176 +597,458 @@ export function TraceHistoryPaper() {
 					style={{ flex: 1, marginRight: -16, minHeight: 0 }}
 					styles={{ viewport: { paddingRight: 16 } }}
 					type="auto"
+					viewportRef={viewportRef}
 				>
-					{traces.length === 0 && (
+					{loadingTraces && <TraceHistoryLoader />}
+
+					{!loadingTraces && traces.length === 0 && (
 						<Text c="dimmed" size="sm">
 							No traces yet
 						</Text>
 					)}
 
-					{traces.length > 0 && (
+					{traces.length > 0 && traceHistoryMode === "merged" && (
 						<Stack gap={6}>
-							{traces.map((trace) => {
-								const selected = selectedTrace?.id === trace.id;
-								const copied = copiedTraceId === trace.id;
-								const curlCopied = copiedCurlTraceId === trace.id;
-								const httpTrace = isHttpTrace(trace);
-								const middlewareTrace = isMiddlewareTrace(trace);
-								const outcome = getTraceOutcome(trace);
-								const canOpenInPlayground = httpTrace
-									? findTraceRouteId(graph, trace) !== null
-									: getProviderCall(trace) !== null;
-								const canRerun = httpTrace || getProviderCall(trace) !== null;
-								const canOpenInGraph =
-									findTraceGraphModuleId(graph, trace) !== null;
+							{mergedDistributedTraces.map((distributedTrace) => {
+								const rootTrace = distributedTrace.rootTrace;
+								const selected = distributedTrace.traces.some(
+									(trace) => trace.id === selectedTraceId,
+								);
+								const httpTrace = isHttpTrace(rootTrace);
+								const outcome = getDistributedTraceOutcome(distributedTrace);
+								const distributedCopied =
+									copiedDistributedTraceId === distributedTrace.id;
+								const canRerun =
+									httpTrace || getProviderCall(rootTrace) !== null;
 
 								return (
 									<Paper
 										bg={selected ? "teal.0" : undefined}
 										component="button"
-										key={trace.id}
-										onClick={() => setSelectedTraceId(trace.id)}
+										key={distributedTrace.id}
+										onClick={() => {
+											setSelectedTraceId(rootTrace.id, "full");
+										}}
 										p="xs"
 										style={{
 											border: selected
 												? "1px solid var(--mantine-color-teal-4)"
 												: "1px solid var(--mantine-color-gray-2)",
+											borderLeft: `3px solid ${getServiceColor(rootTrace.serviceName)}`,
 											cursor: "pointer",
 											textAlign: "left",
 										}}
 									>
-										<Group gap="xs" wrap="nowrap" align="flex-start">
-											<Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
-												<Group gap="xs" wrap="nowrap">
-													{httpTrace ? (
-														<Badge
-															color={getMethodColor(trace.method)}
-															size="sm"
-														>
-															{trace.method}
-														</Badge>
-													) : (
+										<Group
+											align="flex-start"
+											gap="xs"
+											style={{ position: "relative" }}
+											wrap="nowrap"
+										>
+											<Stack gap={6} style={{ flex: 1, minWidth: 0 }}>
+												<Group
+													justify="space-between"
+													style={{ paddingRight: 24 }}
+													wrap="nowrap"
+												>
+													<Group gap="xs" style={{ minWidth: 0 }} wrap="nowrap">
 														<Badge
 															color={
-																middlewareTrace
-																	? getSpanColor("prehandler")
-																	: getMethodColor(trace.method)
+																httpTrace
+																	? getMethodColor(rootTrace.method)
+																	: (getEntrypointBadgeColor(rootTrace) ??
+																		getSpanColor("provider"))
 															}
 															size="sm"
-															styles={{ label: { textTransform: "none" } }}
-															variant="light"
+															style={{ flexShrink: 0 }}
 														>
-															{middlewareTrace
-																? "Middleware"
-																: getTraceKindLabel(trace.method)}
+															{httpTrace
+																? "HTTP"
+																: getEntrypointBadgeLabel(rootTrace)}
 														</Badge>
-													)}
-													{httpTrace ? (
-														<Tooltip
-															label={trace.url}
-															maw={420}
-															multiline
-															openDelay={300}
-														>
-															<Text fw={700} lineClamp={1} size="sm">
-																{trace.url}
-															</Text>
-														</Tooltip>
-													) : (
-														<MethodName
-															args={getProviderCallArgs(trace)}
+														<Text
+															c={outcome.color}
 															fw={700}
-															methodName={trace.url}
-														/>
-													)}
-												</Group>
-												<Group gap="xs">
+															size="xs"
+															style={{ flexShrink: 0 }}
+														>
+															{outcome.label}
+														</Text>
+														<Text
+															fw={700}
+															lineClamp={1}
+															size="sm"
+															style={{ flex: 1, minWidth: 0 }}
+														>
+															{rootTrace.url}
+														</Text>
+													</Group>
 													<Text
-														c={
-															httpTrace
-																? getStatusCodeColor(trace.statusCode)
-																: outcome.color
-														}
-														fw={700}
+														c="dimmed"
 														size="xs"
+														fs="italic"
+														style={{ whiteSpace: "nowrap" }}
 													>
-														{httpTrace
-															? (trace.statusCode ?? "-")
-															: outcome.label}
+														{formatStartTime(distributedTrace.startedAt)}
 													</Text>
-													<Text c="dimmed" size="xs">
-														{Math.round(trace.durationMs)} ms
-													</Text>
-													<Text c="dimmed" size="xs">
-														{trace.spans.length} spans
+												</Group>
+
+												<Group justify="space-between" wrap="nowrap">
+													<Group gap={4} style={{ minWidth: 0 }}>
+														{distributedTrace.services.map((serviceName) => (
+															<ServiceBadge
+																key={serviceName}
+																serviceName={serviceName}
+															/>
+														))}
+														<Text
+															c="dimmed"
+															size="xs"
+															style={{ flexShrink: 0, whiteSpace: "nowrap" }}
+														>
+															{distributedTrace.traces.length} service traces
+														</Text>
+													</Group>
+													<Text
+														c="dimmed"
+														size="xs"
+														style={{ whiteSpace: "nowrap" }}
+													>
+														{distributedTrace.spanCount} spans ·{" "}
+														{Math.round(distributedTrace.durationMs)} ms
 													</Text>
 												</Group>
 											</Stack>
-											<Menu position="bottom-end" shadow="md" withinPortal>
-												<Menu.Target>
-													<ActionIcon
-														color="gray"
-														onClick={(e) => e.stopPropagation()}
-														size="sm"
-														variant="subtle"
-													>
-														<DotsIcon />
-													</ActionIcon>
-												</Menu.Target>
-												<Menu.Dropdown onClick={(e) => e.stopPropagation()}>
-													<Menu.Item
-														closeMenuOnClick={false}
-														leftSection={<CopyIcon />}
-														onClick={(e) => copyTrace(trace, e)}
-													>
-														{copied ? "Copied!" : "Copy JSON"}
-													</Menu.Item>
-													{httpTrace && (
+											<div
+												style={{ position: "absolute", right: "-4px", top: 0 }}
+											>
+												<Menu position="bottom-end" shadow="md" withinPortal>
+													<Menu.Target>
+														<ActionIcon
+															color="gray"
+															onClick={(e) => e.stopPropagation()}
+															size="sm"
+															variant="subtle"
+														>
+															<DotsIcon />
+														</ActionIcon>
+													</Menu.Target>
+													<Menu.Dropdown onClick={(e) => e.stopPropagation()}>
 														<Menu.Item
 															closeMenuOnClick={false}
-															leftSection={<TerminalIcon />}
-															onClick={(e) => copyTraceCurl(trace, e)}
+															leftSection={<CopyIcon />}
+															onClick={(e) =>
+																copyDistributedTrace(distributedTrace, e)
+															}
 														>
-															{curlCopied ? "Copied!" : "Copy as curl"}
+															{distributedCopied ? "Copied!" : "Copy JSON"}
 														</Menu.Item>
-													)}
-													{canRerun && (
+														{canRerun && (
+															<Menu.Item
+																leftSection={<RerunIcon />}
+																onClick={() => rerunTrace(rootTrace)}
+															>
+																Rerun
+															</Menu.Item>
+														)}
+														<Menu.Divider />
 														<Menu.Item
-															leftSection={<RerunIcon />}
-															onClick={() => rerunTrace(trace)}
+															color="red"
+															leftSection={<TrashIcon />}
+															onClick={() =>
+																deleteDistributedTrace.mutate(distributedTrace)
+															}
 														>
-															Rerun
+															Delete
 														</Menu.Item>
-													)}
-													{canOpenInPlayground && (
-														<Menu.Item
-															leftSection={<PlayIcon />}
-															onClick={() => openInPlayground(trace)}
-														>
-															Open in playground
-														</Menu.Item>
-													)}
-													{canOpenInGraph && (
-														<Menu.Item
-															leftSection={<GraphIcon />}
-															onClick={() => openInGraph(trace)}
-														>
-															Open in graph
-														</Menu.Item>
-													)}
-													<Menu.Divider />
-													<Menu.Item
-														color="red"
-														leftSection={<TrashIcon />}
-														onClick={() =>
-															deleteTrace.mutate({ traceId: trace.id })
-														}
-													>
-														Delete
-													</Menu.Item>
-												</Menu.Dropdown>
-											</Menu>
+													</Menu.Dropdown>
+												</Menu>
+											</div>
 										</Group>
+									</Paper>
+								);
+							})}
+						</Stack>
+					)}
+
+					{traces.length > 0 && traceHistoryMode === "service" && (
+						<Stack gap={6}>
+							{serviceDistributedTraces.map((distributedTrace) => {
+								// The group highlights only for a full-trace selection; a
+								// single-entry selection highlights just that entry below.
+								const groupSelected =
+									selectedTraceScope === "full" &&
+									distributedTrace.traces.some(
+										(trace) => trace.id === selectedTraceId,
+									);
+
+								return (
+									<Paper
+										bg={groupSelected ? "teal.0" : "gray.0"}
+										key={distributedTrace.id}
+										p={4}
+										style={{
+											border: groupSelected
+												? "1px solid var(--mantine-color-teal-3)"
+												: "1px solid var(--mantine-color-gray-3)",
+										}}
+									>
+										<Stack gap={4}>
+											<UnstyledButton
+												onClick={() =>
+													setSelectedTraceId(
+														distributedTrace.rootTrace.id,
+														"full",
+													)
+												}
+												style={{ cursor: "pointer", width: "100%" }}
+											>
+												<Group justify="space-between" px={6} wrap="nowrap">
+													<Text c="dimmed" fw={600} size="xs">
+														Full trace ({distributedTrace.traces.length}{" "}
+														entries)
+													</Text>
+													<Text fs="italic" c="dimmed" size="xs">
+														{Math.round(distributedTrace.durationMs)} ms ·{" "}
+														{formatStartTime(distributedTrace.startedAt)}
+													</Text>
+												</Group>
+											</UnstyledButton>
+
+											<Stack gap={3}>
+												{distributedTrace.traces.map((trace) => {
+													const selected =
+														selectedTraceScope !== "full" &&
+														selectedTrace?.id === trace.id;
+													const copied = copiedTraceId === trace.id;
+													const curlCopied = copiedCurlTraceId === trace.id;
+													const httpTrace = isHttpTrace(trace);
+													const middlewareTrace = isMiddlewareTrace(trace);
+													const outcome = getTraceOutcome(trace);
+													const traceGraph = graphForTrace(trace);
+													const canOpenInPlayground = httpTrace
+														? findTraceRouteId(traceGraph, trace) !== null
+														: getTraceCall(traceGraph, trace) !== null;
+													const canRerun =
+														httpTrace ||
+														getTraceCall(traceGraph, trace) !== null;
+													const canOpenInGraph =
+														findTraceGraphModuleId(traceGraph, trace) !== null;
+
+													return (
+														<Paper
+															bg={selected ? "teal.0" : undefined}
+															component="button"
+															key={trace.id}
+															onClick={() => {
+																setSelectedTraceId(trace.id);
+															}}
+															p="xs"
+															style={{
+																border: selected
+																	? "1px solid var(--mantine-color-teal-4)"
+																	: "1px solid var(--mantine-color-gray-2)",
+																borderLeft: `3px solid ${getServiceColor(trace.serviceName)}`,
+																cursor: "pointer",
+																textAlign: "left",
+															}}
+														>
+															<Group
+																align="flex-start"
+																gap="xs"
+																style={{ position: "relative" }}
+																wrap="nowrap"
+															>
+																<Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
+																	<Group
+																		gap="xs"
+																		style={{ paddingRight: 24 }}
+																		wrap="nowrap"
+																	>
+																		{httpTrace ? (
+																			<Badge
+																				color={getMethodColor(trace.method)}
+																				size="sm"
+																				style={{ flexShrink: 0 }}
+																			>
+																				HTTP
+																			</Badge>
+																		) : (
+																			<Badge
+																				color={
+																					middlewareTrace
+																						? getSpanColor("prehandler")
+																						: (getEntrypointBadgeColor(trace) ??
+																							getMethodColor(trace.method))
+																				}
+																				size="sm"
+																				style={{ flexShrink: 0 }}
+																				styles={{
+																					label: { textTransform: "none" },
+																				}}
+																				variant="light"
+																			>
+																				{middlewareTrace
+																					? "Middleware"
+																					: getEntrypointBadgeLabel(trace)}
+																			</Badge>
+																		)}
+																		<Text
+																			c={
+																				httpTrace
+																					? getStatusCodeColor(trace.statusCode)
+																					: outcome.color
+																			}
+																			fw={700}
+																			size="xs"
+																			style={{ flexShrink: 0 }}
+																		>
+																			{httpTrace
+																				? (trace.statusCode ?? "-")
+																				: outcome.label}
+																		</Text>
+																		{httpTrace ? (
+																			<Tooltip
+																				label={trace.url}
+																				maw={420}
+																				multiline
+																				openDelay={300}
+																			>
+																				<Text
+																					fw={700}
+																					size="sm"
+																					style={{ flex: 1, minWidth: 0 }}
+																					truncate
+																				>
+																					{trace.url}
+																				</Text>
+																			</Tooltip>
+																		) : (
+																			<MethodName
+																				args={getProviderCallArgs(trace)}
+																				fw={700}
+																				methodName={trace.url}
+																				truncate
+																			/>
+																		)}
+																	</Group>
+																	<Group
+																		gap="xs"
+																		justify="space-between"
+																		wrap="nowrap"
+																	>
+																		<Group
+																			gap="xs"
+																			style={{ minWidth: 0 }}
+																			wrap="nowrap"
+																		>
+																			<ServiceBadge
+																				serviceName={trace.serviceName}
+																			/>
+																		</Group>
+																		<Text
+																			c="dimmed"
+																			size="xs"
+																			style={{ whiteSpace: "nowrap" }}
+																		>
+																			{trace.spans.length} spans ·{" "}
+																			{Math.round(trace.durationMs)} ms
+																		</Text>
+																	</Group>
+																</Stack>
+																<div
+																	style={{
+																		position: "absolute",
+																		right: "-4px",
+																		top: 0,
+																	}}
+																>
+																	<Menu
+																		position="bottom-end"
+																		shadow="md"
+																		withinPortal
+																	>
+																		<Menu.Target>
+																			<ActionIcon
+																				color="gray"
+																				onClick={(e) => e.stopPropagation()}
+																				size="sm"
+																				variant="subtle"
+																			>
+																				<DotsIcon />
+																			</ActionIcon>
+																		</Menu.Target>
+																		<Menu.Dropdown
+																			onClick={(e) => e.stopPropagation()}
+																		>
+																			<Menu.Item
+																				closeMenuOnClick={false}
+																				leftSection={<CopyIcon />}
+																				onClick={(e) => copyTrace(trace, e)}
+																			>
+																				{copied ? "Copied!" : "Copy JSON"}
+																			</Menu.Item>
+																			{httpTrace && (
+																				<Menu.Item
+																					closeMenuOnClick={false}
+																					leftSection={<TerminalIcon />}
+																					onClick={(e) =>
+																						copyTraceCurl(trace, e)
+																					}
+																				>
+																					{curlCopied
+																						? "Copied!"
+																						: "Copy as curl"}
+																				</Menu.Item>
+																			)}
+																			{canRerun && (
+																				<Menu.Item
+																					leftSection={<RerunIcon />}
+																					onClick={() => rerunTrace(trace)}
+																				>
+																					Rerun
+																				</Menu.Item>
+																			)}
+																			{canOpenInPlayground && (
+																				<Menu.Item
+																					leftSection={<PlayIcon />}
+																					onClick={() =>
+																						openInPlayground(trace)
+																					}
+																				>
+																					Open in playground
+																				</Menu.Item>
+																			)}
+																			{canOpenInGraph && (
+																				<Menu.Item
+																					leftSection={<GraphIcon />}
+																					onClick={() => openInGraph(trace)}
+																				>
+																					Open in graph
+																				</Menu.Item>
+																			)}
+																			<Menu.Divider />
+																			<Menu.Item
+																				color="red"
+																				leftSection={<TrashIcon />}
+																				onClick={() =>
+																					deleteTrace.mutate({
+																						serviceName: trace.serviceName,
+																						traceId: trace.id,
+																					})
+																				}
+																			>
+																				Delete
+																			</Menu.Item>
+																		</Menu.Dropdown>
+																	</Menu>
+																</div>
+															</Group>
+														</Paper>
+													);
+												})}
+											</Stack>
+										</Stack>
 									</Paper>
 								);
 							})}
@@ -570,7 +1090,7 @@ function findTraceGraphModuleId(
 		return routeId?.split(":")[0] ?? null;
 	}
 
-	const call = getProviderCall(trace);
+	const call = getTraceCall(graph, trace);
 	if (!call) return null;
 
 	return graph.modules.some((module) => module.id === call.scopeModuleId)
@@ -612,10 +1132,167 @@ function findEntrypointCall(graph: GetGraphResponse, call: ProviderCall) {
 	);
 }
 
+// Live entrypoint invocations (e.g. a real RabbitMQ message) don't carry a
+// playground-style request.body; they record their args on request.args and the
+// controller/handler on the controller span. Reconstruct a ProviderCall by
+// matching that controller+handler back to a graph entrypoint, which yields the
+// scope module id needed to replay it or open it in the playground.
+function getEntrypointCall(
+	graph: GetGraphResponse,
+	trace: Trace,
+): ProviderCall | null {
+	if (!isEntrypointTrace(trace)) return null;
+
+	const controllerSpan = trace.spans.find((span) => span.kind === "controller");
+	if (!controllerSpan) return null;
+
+	const { methodName, registrationKey: providerKey } = controllerSpan;
+
+	const module = graph.modules.find((candidate) =>
+		candidate.entrypoints.some(
+			(entrypoint) =>
+				entrypoint.type !== "http" &&
+				entrypoint.controller === providerKey &&
+				entrypoint.handler === methodName,
+		),
+	);
+	if (!module) return null;
+
+	return {
+		args: Array.isArray(trace.request.args) ? trace.request.args : [],
+		methodName,
+		providerKey,
+		scopeModuleId: module.id,
+	};
+}
+
+// The provider call behind a trace, whether it was recorded via the playground
+// (call in request.body) or fired for real as an entrypoint listener.
+function getTraceCall(
+	graph: GetGraphResponse,
+	trace: Trace,
+): ProviderCall | null {
+	return getProviderCall(trace) ?? getEntrypointCall(graph, trace);
+}
+
+type DistributedTraceGroup = {
+	id: string;
+	traces: Trace[];
+	rootTrace: Trace;
+	services: string[];
+	startedAt: number;
+	durationMs: number;
+	spanCount: number;
+};
+
+function groupDistributedTraces(traces: Trace[]): DistributedTraceGroup[] {
+	const tracesById = new Map<string, Trace[]>();
+
+	for (const trace of traces) {
+		const group = tracesById.get(trace.distributedTraceId) ?? [];
+		group.push(trace);
+		tracesById.set(trace.distributedTraceId, group);
+	}
+
+	return [...tracesById.entries()]
+		.map(([id, groupedTraces]) => {
+			const spanIds = new Set(groupedTraces.map((trace) => trace.spanId));
+			const orderedTraces = [...groupedTraces].sort(
+				(a, b) => a.startedAt - b.startedAt,
+			);
+			const rootTrace =
+				orderedTraces.find(
+					(trace) =>
+						trace.parentSpanId === null || !spanIds.has(trace.parentSpanId),
+				) ?? orderedTraces[0]!;
+			const startedAt = Math.min(
+				...orderedTraces.map((trace) => trace.startedAt),
+			);
+			const finishedAt = Math.max(
+				...orderedTraces.map((trace) => trace.startedAt + trace.durationMs),
+			);
+
+			return {
+				id,
+				traces: orderedTraces,
+				rootTrace,
+				services: [...new Set(orderedTraces.map((trace) => trace.serviceName))],
+				startedAt,
+				durationMs: finishedAt - startedAt,
+				spanCount: orderedTraces.reduce(
+					(total, trace) => total + trace.spans.length,
+					0,
+				),
+			};
+		})
+		.sort((a, b) => b.startedAt - a.startedAt);
+}
+
+// Wall-clock time the group's earliest trace started, shown on the group header.
+function formatStartTime(startedAt: number): string {
+	return new Date(startedAt).toLocaleTimeString([], {
+		hour: "2-digit",
+		minute: "2-digit",
+		second: "2-digit",
+		hour12: false,
+	});
+}
+
+function getDistributedTraceOutcome(trace: DistributedTraceGroup): {
+	color: string;
+	label: string;
+} {
+	if (trace.traces.some((serviceTrace) => serviceTrace.status === "error")) {
+		return { color: "red", label: "Error" };
+	}
+
+	return { color: "green", label: "OK" };
+}
+
+function TraceHistoryLoader() {
+	return (
+		<Center aria-label="Loading trace history" py={64}>
+			<Loader size="sm" />
+		</Center>
+	);
+}
+
+function ServiceBadge({ serviceName }: { serviceName: string }) {
+	const backgroundColor = getServiceBackgroundColor(serviceName);
+	const borderColor = getServiceBorderColor(serviceName);
+	const color = getServiceColor(serviceName);
+
+	return (
+		<Badge
+			size="xs"
+			styles={{
+				root: {
+					backgroundColor,
+					border: `1px solid ${borderColor}`,
+					color,
+				},
+			}}
+		>
+			{serviceName}
+		</Badge>
+	);
+}
+
 function getRecordedHeaders(trace: Trace): Record<string, string> {
 	return trace.request.headers && typeof trace.request.headers === "object"
 		? (trace.request.headers as Record<string, string>)
 		: {};
+}
+
+function getReplayHeaders(trace: Trace): Record<string, string> {
+	return Object.fromEntries(
+		Object.entries(getRecordedHeaders(trace)).filter(
+			([key]) =>
+				!["connection", "content-length", "host", "traceparent"].includes(
+					key.toLowerCase(),
+				),
+		),
+	);
 }
 
 function getProviderCall(trace: Trace): ProviderCall | null {

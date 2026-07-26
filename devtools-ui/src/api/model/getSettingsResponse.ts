@@ -9,4 +9,5 @@
 export interface GetSettingsResponse {
 	/** @nullable */
 	appUrl: string | null;
+	serviceName: string;
 }

@@ -1,8 +1,8 @@
 .panel {
 	flex: 1;
 	overflow: hidden;
-	height: calc(100vh - 125px);
-	min-height: 680px;
+	height: calc(100vh - 50px);
+	min-height: 760px;
 }
 
 .content {

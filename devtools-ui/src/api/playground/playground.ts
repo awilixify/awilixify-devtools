@@ -23,7 +23,7 @@ import type {
 	UseSuspenseQueryResult,
 } from "@tanstack/react-query";
 import { useMutation, useQuery, useSuspenseQuery } from "@tanstack/react-query";
-
+import { devtoolsFetch } from "../../devtools-fetch";
 import type {
 	GetDevtoolsPlaygroundMethodsParams,
 	GetProviderMethodsResponse,
@@ -31,6 +31,8 @@ import type {
 	InvokeProviderBody,
 	InvokeProviderResponse,
 } from "../model";
+
+type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
 const withQueryKey = <T extends object, K>(
 	query: T,
@@ -76,15 +78,13 @@ export const getDevtoolsPlaygroundMethods = async (
 	params: GetDevtoolsPlaygroundMethodsParams,
 	options?: RequestInit,
 ): Promise<GetProviderMethodsResponse> => {
-	const res = await fetch(getGetDevtoolsPlaygroundMethodsUrl(params), {
-		...options,
-		method: "GET",
-	});
-
-	const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-	const data: GetProviderMethodsResponse = body ? JSON.parse(body) : {};
-	return data;
+	return devtoolsFetch<GetProviderMethodsResponse>(
+		getGetDevtoolsPlaygroundMethodsUrl(params),
+		{
+			...options,
+			method: "GET",
+		},
+	);
 };
 
 export const getGetDevtoolsPlaygroundMethodsQueryKey = (
@@ -109,10 +109,10 @@ export const getGetDevtoolsPlaygroundMethodsQueryOptions = <
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 ) => {
-	const { query: queryOptions, fetch: fetchOptions } = options ?? {};
+	const { query: queryOptions, request: requestOptions } = options ?? {};
 
 	const queryKey =
 		queryOptions?.queryKey ?? getGetDevtoolsPlaygroundMethodsQueryKey(params);
@@ -120,7 +120,7 @@ export const getGetDevtoolsPlaygroundMethodsQueryOptions = <
 	const queryFn: QueryFunction<
 		Awaited<ReturnType<typeof getDevtoolsPlaygroundMethods>>
 	> = ({ signal }) =>
-		getDevtoolsPlaygroundMethods(params, { signal, ...fetchOptions });
+		getDevtoolsPlaygroundMethods(params, { signal, ...requestOptions });
 
 	return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
 		Awaited<ReturnType<typeof getDevtoolsPlaygroundMethods>>,
@@ -155,7 +155,7 @@ export function useGetDevtoolsPlaygroundMethods<
 				>,
 				"initialData"
 			>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): DefinedUseQueryResult<TData, TError> & {
@@ -182,7 +182,7 @@ export function useGetDevtoolsPlaygroundMethods<
 				>,
 				"initialData"
 			>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & {
@@ -201,7 +201,7 @@ export function useGetDevtoolsPlaygroundMethods<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & {
@@ -224,7 +224,7 @@ export function useGetDevtoolsPlaygroundMethods<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & {
@@ -256,10 +256,10 @@ export const getGetDevtoolsPlaygroundMethodsSuspenseQueryOptions = <
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 ) => {
-	const { query: queryOptions, fetch: fetchOptions } = options ?? {};
+	const { query: queryOptions, request: requestOptions } = options ?? {};
 
 	const queryKey =
 		queryOptions?.queryKey ?? getGetDevtoolsPlaygroundMethodsQueryKey(params);
@@ -267,7 +267,7 @@ export const getGetDevtoolsPlaygroundMethodsSuspenseQueryOptions = <
 	const queryFn: QueryFunction<
 		Awaited<ReturnType<typeof getDevtoolsPlaygroundMethods>>
 	> = ({ signal }) =>
-		getDevtoolsPlaygroundMethods(params, { signal, ...fetchOptions });
+		getDevtoolsPlaygroundMethods(params, { signal, ...requestOptions });
 
 	return { queryKey, queryFn, ...queryOptions } as UseSuspenseQueryOptions<
 		Awaited<ReturnType<typeof getDevtoolsPlaygroundMethods>>,
@@ -294,7 +294,7 @@ export function useGetDevtoolsPlaygroundMethodsSuspense<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseSuspenseQueryResult<TData, TError> & {
@@ -313,7 +313,7 @@ export function useGetDevtoolsPlaygroundMethodsSuspense<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseSuspenseQueryResult<TData, TError> & {
@@ -332,7 +332,7 @@ export function useGetDevtoolsPlaygroundMethodsSuspense<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseSuspenseQueryResult<TData, TError> & {
@@ -355,7 +355,7 @@ export function useGetDevtoolsPlaygroundMethodsSuspense<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseSuspenseQueryResult<TData, TError> & {
@@ -388,17 +388,15 @@ export const postDevtoolsPlaygroundInvoke = async (
 	invokeProviderBody: InvokeProviderBody,
 	options?: RequestInit,
 ): Promise<InvokeProviderResponse> => {
-	const res = await fetch(getPostDevtoolsPlaygroundInvokeUrl(), {
-		...options,
-		method: "POST",
-		headers: { "Content-Type": "application/json", ...options?.headers },
-		body: JSON.stringify(invokeProviderBody),
-	});
-
-	const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-	const data: InvokeProviderResponse = body ? JSON.parse(body) : {};
-	return data;
+	return devtoolsFetch<InvokeProviderResponse>(
+		getPostDevtoolsPlaygroundInvokeUrl(),
+		{
+			...options,
+			method: "POST",
+			headers: { "Content-Type": "application/json", ...options?.headers },
+			body: JSON.stringify(invokeProviderBody),
+		},
+	);
 };
 
 export const getPostDevtoolsPlaygroundInvokeMutationOptions = <
@@ -411,7 +409,7 @@ export const getPostDevtoolsPlaygroundInvokeMutationOptions = <
 		{ data: InvokeProviderBody },
 		TContext
 	>;
-	fetch?: RequestInit;
+	request?: SecondParameter<typeof devtoolsFetch>;
 }): UseMutationOptions<
 	Awaited<ReturnType<typeof postDevtoolsPlaygroundInvoke>>,
 	TError,
@@ -419,13 +417,13 @@ export const getPostDevtoolsPlaygroundInvokeMutationOptions = <
 	TContext
 > => {
 	const mutationKey = ["postDevtoolsPlaygroundInvoke"];
-	const { mutation: mutationOptions, fetch: fetchOptions } = options
+	const { mutation: mutationOptions, request: requestOptions } = options
 		? options.mutation &&
 			"mutationKey" in options.mutation &&
 			options.mutation.mutationKey
 			? options
 			: { ...options, mutation: { ...options.mutation, mutationKey } }
-		: { mutation: { mutationKey }, fetch: undefined };
+		: { mutation: { mutationKey }, request: undefined };
 
 	const mutationFn: MutationFunction<
 		Awaited<ReturnType<typeof postDevtoolsPlaygroundInvoke>>,
@@ -433,7 +431,7 @@ export const getPostDevtoolsPlaygroundInvokeMutationOptions = <
 	> = (props) => {
 		const { data } = props ?? {};
 
-		return postDevtoolsPlaygroundInvoke(data, fetchOptions);
+		return postDevtoolsPlaygroundInvoke(data, requestOptions);
 	};
 
 	return { mutationFn, ...mutationOptions };
@@ -459,7 +457,7 @@ export const usePostDevtoolsPlaygroundInvoke = <
 			{ data: InvokeProviderBody },
 			TContext
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseMutationResult<
@@ -485,17 +483,15 @@ export const postDevtoolsPlaygroundInvokeHandler = async (
 	invokeHandlerBody: InvokeHandlerBody,
 	options?: RequestInit,
 ): Promise<InvokeProviderResponse> => {
-	const res = await fetch(getPostDevtoolsPlaygroundInvokeHandlerUrl(), {
-		...options,
-		method: "POST",
-		headers: { "Content-Type": "application/json", ...options?.headers },
-		body: JSON.stringify(invokeHandlerBody),
-	});
-
-	const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-	const data: InvokeProviderResponse = body ? JSON.parse(body) : {};
-	return data;
+	return devtoolsFetch<InvokeProviderResponse>(
+		getPostDevtoolsPlaygroundInvokeHandlerUrl(),
+		{
+			...options,
+			method: "POST",
+			headers: { "Content-Type": "application/json", ...options?.headers },
+			body: JSON.stringify(invokeHandlerBody),
+		},
+	);
 };
 
 export const getPostDevtoolsPlaygroundInvokeHandlerMutationOptions = <
@@ -508,7 +504,7 @@ export const getPostDevtoolsPlaygroundInvokeHandlerMutationOptions = <
 		{ data: InvokeHandlerBody },
 		TContext
 	>;
-	fetch?: RequestInit;
+	request?: SecondParameter<typeof devtoolsFetch>;
 }): UseMutationOptions<
 	Awaited<ReturnType<typeof postDevtoolsPlaygroundInvokeHandler>>,
 	TError,
@@ -516,13 +512,13 @@ export const getPostDevtoolsPlaygroundInvokeHandlerMutationOptions = <
 	TContext
 > => {
 	const mutationKey = ["postDevtoolsPlaygroundInvokeHandler"];
-	const { mutation: mutationOptions, fetch: fetchOptions } = options
+	const { mutation: mutationOptions, request: requestOptions } = options
 		? options.mutation &&
 			"mutationKey" in options.mutation &&
 			options.mutation.mutationKey
 			? options
 			: { ...options, mutation: { ...options.mutation, mutationKey } }
-		: { mutation: { mutationKey }, fetch: undefined };
+		: { mutation: { mutationKey }, request: undefined };
 
 	const mutationFn: MutationFunction<
 		Awaited<ReturnType<typeof postDevtoolsPlaygroundInvokeHandler>>,
@@ -530,7 +526,7 @@ export const getPostDevtoolsPlaygroundInvokeHandlerMutationOptions = <
 	> = (props) => {
 		const { data } = props ?? {};
 
-		return postDevtoolsPlaygroundInvokeHandler(data, fetchOptions);
+		return postDevtoolsPlaygroundInvokeHandler(data, requestOptions);
 	};
 
 	return { mutationFn, ...mutationOptions };
@@ -556,7 +552,7 @@ export const usePostDevtoolsPlaygroundInvokeHandler = <
 			{ data: InvokeHandlerBody },
 			TContext
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseMutationResult<

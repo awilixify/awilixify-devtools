@@ -37,8 +37,8 @@ importers:
         specifier: ^22.15.21
         version: 22.19.21
       awilixify:
-        specifier: ^3.1.2
-        version: 3.1.2(awilix@12.1.1)(react@19.2.6)
+        specifier: ^3.1.3
+        version: 3.1.3(awilix@12.1.1)(react@19.2.6)
       del-cli:
         specifier: ^7.0.0
         version: 7.0.0
@@ -109,6 +109,9 @@ importers:
       vite:
         specifier: ^7.0.0
         version: 7.3.5(@types/node@22.19.21)(jiti@2.7.0)(yaml@2.9.0)
+      yaml:
+        specifier: ^2.9.0
+        version: 2.9.0
 
 packages:
 
@@ -1080,12 +1083,16 @@ packages:
     resolution: {integrity: sha512-A93ak7Ypot8YlkfulCBL4GCkZozuwdfwOJs+4l8+svJYCfXKuokLxWe/usTiatN1dlPOdT5HO0MBpNNTzZSWug==}
     engines: {node: '>=16.3.0'}
 
-  awilixify@3.1.2:
-    resolution: {integrity: sha512-tBkKBjMA80v86OP2iO7ivUFZKYnWrUrSroFWMY/IGJisUMf86D0HFJ65uycBmMnFKiGEdV6sdygF/JAHk8fZqw==}
+  awilixify@3.1.3:
+    resolution: {integrity: sha512-E7YurbW2lEk48HzpTLHbsZ24sr5FmebLDOk7GqA760VVPQX9wlhfNkoRdsB/ivhWHz28++ivuP5/jvyZB1z3ug==}
+    hasBin: true
     peerDependencies:
+      '@asyncapi/modelina': ^5.10.1
       awilix: '>=9.0.0'
       react: '>=18.0.0 || >=19.0.0'
     peerDependenciesMeta:
+      '@asyncapi/modelina':
+        optional: true
       react:
         optional: true
 
@@ -2885,7 +2892,7 @@ snapshots:
     dependencies:
       fast-glob: 3.3.3
 
-  awilixify@3.1.2(awilix@12.1.1)(react@19.2.6):
+  awilixify@3.1.3(awilix@12.1.1)(react@19.2.6):
     dependencies:
       awilix: 12.1.1
     optionalDependencies:

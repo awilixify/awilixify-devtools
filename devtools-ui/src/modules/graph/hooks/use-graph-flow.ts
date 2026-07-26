@@ -3,18 +3,24 @@ import {
 	useEdgesState,
 	useNodesState,
 } from "@xyflow/react";
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useGraphSettings } from "../GraphSettingsContext.js";
 import { findBestSearchMatch } from "../graph-search";
 import type { ModuleFlowEdge, ModuleFlowNode } from "../types";
 import { toFlowEdges } from "./flow-edges";
 import { toFlowNodes } from "./flow-nodes";
 import { groupGraph } from "./graph-grouping";
-import { layout } from "./graph-layout";
+import { layoutByService, routeMeasuredOperationEdges } from "./graph-layout";
 import {
 	filterGraphByImpact,
 	filterGraphByRelated,
+	filterGraphByServices,
 } from "./graph-view-filters";
+import { getModuleSelectionRelations } from "./module-selection-relations";
+import {
+	getOperationConnections,
+	toOperationFlowEdges,
+} from "./operation-flow-edges";
 import {
 	filterProviderFocusGraph,
 	getProviderFocusState,
@@ -24,7 +30,7 @@ import { useModuleGraphData } from "./use-module-graph-data.js";
 const SELECTED_NODE_MAX_ZOOM = 0.45;
 
 export function useGraphFlow() {
-	const { graph, loading } = useModuleGraphData();
+	const { error, graph, loading } = useModuleGraphData();
 	const {
 		centerModuleRequest,
 		groupDynamicModules,
@@ -42,6 +48,9 @@ export function useGraphFlow() {
 
 	const [nodes, setNodes, onNodesChange] = useNodesState<ModuleFlowNode>([]);
 	const [edges, setEdges, onEdgesChange] = useEdgesState<ModuleFlowEdge>([]);
+	const [hiddenServiceNames, setHiddenServiceNames] = useState<Set<string>>(
+		() => new Set(),
+	);
 	const flowRef = useRef<ReactFlowInstance<
 		ModuleFlowNode,
 		ModuleFlowEdge
@@ -52,6 +61,74 @@ export function useGraphFlow() {
 	const processedCenterSeqRef = useRef(0);
 	const processedSearchSubmitSeqRef = useRef(searchSubmitSeq);
 	const lastFocusedSearchRef = useRef<string | null>(null);
+	const previousServiceSetRef = useRef<string | null>(null);
+	const serviceNames = useMemo(
+		() =>
+			graph
+				? [...new Set(graph.modules.map((module) => module.serviceName))].sort()
+				: [],
+		[graph],
+	);
+	const visibleServiceNames = useMemo(
+		() =>
+			new Set(
+				serviceNames.filter(
+					(serviceName) => !hiddenServiceNames.has(serviceName),
+				),
+			),
+		[hiddenServiceNames, serviceNames],
+	);
+	const setServiceVisible = useCallback(
+		(serviceName: string, visible: boolean) => {
+			setHiddenServiceNames((current) => {
+				const currentlyVisible = !current.has(serviceName);
+				if (currentlyVisible === visible) return current;
+
+				if (
+					!visible &&
+					serviceNames.filter((name) => !current.has(name)).length <= 1
+				) {
+					return current;
+				}
+
+				const next = new Set(current);
+				if (visible) {
+					next.delete(serviceName);
+				} else {
+					next.add(serviceName);
+				}
+				return next;
+			});
+			setProviderFocus(null);
+			setSelectedModuleId(null);
+		},
+		[serviceNames, setProviderFocus, setSelectedModuleId],
+	);
+
+	useEffect(() => {
+		setHiddenServiceNames((current) => {
+			const next = new Set(
+				[...current].filter((serviceName) =>
+					serviceNames.includes(serviceName),
+				),
+			);
+
+			return next.size === current.size ? current : next;
+		});
+	}, [serviceNames]);
+
+	useEffect(() => {
+		if (
+			nodes.length === 0 ||
+			nodes.some((node) => !node.measured?.width || !node.measured?.height)
+		) {
+			return;
+		}
+
+		setEdges((currentEdges) =>
+			routeMeasuredOperationEdges(nodes, currentEdges),
+		);
+	}, [nodes, setEdges]);
 
 	const selectedModule = useMemo(
 		() =>
@@ -104,25 +181,51 @@ export function useGraphFlow() {
 			shapedGraph.modules,
 			providerFocus,
 		);
-		const visibleGraph = filterProviderFocusGraph({
+		const providerFocusedGraph = filterProviderFocusGraph({
 			graph: shapedGraph,
 			providerFocus,
 			relatedOnly: showRelatedOnly,
 		});
+		const visibleGraph = filterGraphByServices(
+			providerFocusedGraph,
+			visibleServiceNames,
+		);
+		const operationConnections = getOperationConnections(visibleGraph.modules);
+		const selectionRelations = getModuleSelectionRelations(
+			visibleGraph.edges,
+			operationConnections,
+			selectedModuleId,
+		);
+		const serviceSet = [
+			...new Set(visibleGraph.modules.map((module) => module.serviceName)),
+		].sort();
+		const serviceSetKey = serviceSet.join("|");
+		const previousServiceSet = previousServiceSetRef.current;
+		const shouldFitPlatform =
+			(serviceSet.length > 1 && previousServiceSet === null) ||
+			(previousServiceSet !== null && previousServiceSet !== serviceSetKey);
+		previousServiceSetRef.current = serviceSetKey;
 
 		const flowNodes = toFlowNodes({
 			graph: visibleGraph,
+			operationConnections,
 			providerFocus: providerFocusState,
 			selectedModuleId,
+			selectionRelations,
 			viewMode,
 		});
-		const flowEdges = toFlowEdges({
-			edges: visibleGraph.edges,
-			selectedModuleId,
-			viewMode,
-		});
+		const flowEdges = [
+			...toFlowEdges({
+				edges: visibleGraph.edges,
+				selectionRelations,
+				selectedModuleId,
+				viewMode,
+			}),
+			...toOperationFlowEdges(visibleGraph.modules, selectionRelations),
+		];
 
-		layout(flowNodes, flowEdges, {
+		layoutByService(flowNodes, flowEdges, {
+			nodeSpacing: viewMode === "providers" ? 84 : 36,
 			pinGlobalModulesToTop: true,
 		}).then((layouted) => {
 			setNodes(layouted.nodes);
@@ -154,6 +257,16 @@ export function useGraphFlow() {
 				}
 
 				withFlowInstance(flowRef, (flow) => {
+					if (shouldFitPlatform) {
+						flow.fitView({
+							padding: 0.18,
+							duration: 260,
+							ease: easeOutCubic,
+							interpolate: "smooth",
+						});
+						return;
+					}
+
 					// A newly-entered search query centers its first match and takes
 					// precedence over the current selection. Keep the current zoom so
 					// re-searching only pans, never zooms out.
@@ -194,6 +307,7 @@ export function useGraphFlow() {
 		setNodes,
 		showRelatedOnly,
 		viewMode,
+		visibleServiceNames,
 	]);
 
 	// Submitting the search (Enter) selects the best-matching module, which also
@@ -239,6 +353,7 @@ export function useGraphFlow() {
 	}, [centerModuleRequest, nodes]);
 
 	return {
+		error,
 		loading,
 		edges,
 		flowRef,
@@ -246,6 +361,9 @@ export function useGraphFlow() {
 		onEdgesChange,
 		onNodesChange,
 		selectedModule,
+		serviceNames,
+		setServiceVisible,
+		visibleServiceNames,
 	};
 }
 

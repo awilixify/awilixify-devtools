@@ -8,5 +8,9 @@
 		"outDir": "dist/config",
 		"strict": true
 	},
-	"include": ["devtools-ui/vite.config.ts", "devtools-ui/orval.config.ts"]
+	"include": [
+		"devtools-ui/vite.config.ts",
+		"devtools-ui/vite.dev.config.ts",
+		"devtools-ui/orval.config.ts"
+	]
 }

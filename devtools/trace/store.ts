@@ -1,14 +1,33 @@
 import { AsyncLocalStorage } from "node:async_hooks";
+import { randomBytes } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import type {
 	RecordSpanInput,
 	RunInControllerTraceInput,
 } from "awilixify/devtools";
-import { isPromiseLike, isResultLike } from "awilixify/devtools";
-import type { ConsoleEntry, Trace, TraceSpan } from "../dtos/index.js";
+import {
+	getTracePropagationContext,
+	isPromiseLike,
+	isResultLike,
+	parseTraceparent,
+	runWithTracePropagationContext,
+} from "awilixify/devtools";
+import type {
+	ConsoleEntry,
+	ModuleGraphEntrypoint,
+	Trace,
+	TraceSpan,
+} from "../dtos/index.js";
 import { ResponseSanitizer } from "./response-sanitizer.js";
 import type { ActiveTrace } from "./types.js";
+
+// Resolves a traced controller method back to its non-HTTP entrypoint so the
+// trace can carry the entrypoint kind/label instead of falling back to INVOKE.
+export type EntrypointLookup = (
+	className: string,
+	methodName: string,
+) => ModuleGraphEntrypoint | undefined;
 
 const MAX_TRACES = 50;
 const PLAYGROUND_TRACE_SPAN_KIND = {
@@ -49,12 +68,38 @@ export class DevtoolsTraceStore {
 	private nextTraceId = 1;
 	private pendingWrite: Promise<void> = Promise.resolve();
 
-	constructor(private readonly historyFile: string | null = null) {
+	constructor(
+		private readonly serviceName: string,
+		private readonly historyFile: string | null = null,
+		private readonly findEntrypoint: EntrypointLookup = () => undefined,
+	) {
 		this.loadPersistedTraces();
 	}
 
+	private readonly traceListeners = new Set<(trace: Trace) => void>();
+
 	getTraces(): Trace[] {
 		return [...this.traces];
+	}
+
+	// Notifies subscribers whenever a trace finishes, so a live stream (SSE) can
+	// push new traces to the UI instead of relying on polling.
+	subscribe(listener: (trace: Trace) => void): () => void {
+		this.traceListeners.add(listener);
+
+		return () => {
+			this.traceListeners.delete(listener);
+		};
+	}
+
+	private emitTrace(trace: Trace): void {
+		for (const listener of this.traceListeners) {
+			try {
+				listener(trace);
+			} catch {
+				// A failing subscriber must not break trace recording.
+			}
+		}
 	}
 
 	getTrace(traceId: string): Trace | null {
@@ -96,9 +141,9 @@ export class DevtoolsTraceStore {
 		// Ids must keep growing past the persisted ones, otherwise a restarted
 		// process would mint duplicates of trace ids already in the history.
 		for (const trace of this.traces) {
-			const match = /^trace-(\d+)$/.exec(trace.id);
+			const match = /^([a-z0-9]+(?:-[a-z0-9]+)*)--trace-(\d+)$/.exec(trace.id);
 			if (match) {
-				this.nextTraceId = Math.max(this.nextTraceId, Number(match[1]) + 1);
+				this.nextTraceId = Math.max(this.nextTraceId, Number(match[2]) + 1);
 			}
 		}
 	}
@@ -256,41 +301,64 @@ export class DevtoolsTraceStore {
 		const activeTrace = this.createTraceContext(input);
 		this.captureReplySend(activeTrace, input.args);
 
-		return this.storage.run(activeTrace, () => {
-			try {
-				const result = input.callback();
+		return runWithTracePropagationContext(activeTrace.propagationContext, () =>
+			this.storage.run(activeTrace, () => {
+				try {
+					const result = input.callback();
 
-				if (isPromiseLike(result)) {
-					return result.then(
-						(value) => {
-							this.finishTrace({ response: value, args: input.args });
-							return value;
-						},
-						(error) => {
-							this.finishTrace({ error, args: input.args });
-							throw error;
-						},
-					);
+					if (isPromiseLike(result)) {
+						return result.then(
+							(value) => {
+								this.finishTrace({ response: value, args: input.args });
+								return value;
+							},
+							(error) => {
+								this.finishTrace({ error, args: input.args });
+								throw error;
+							},
+						);
+					}
+
+					this.finishTrace({ response: result, args: input.args });
+					return result;
+				} catch (error) {
+					this.finishTrace({ error, args: input.args });
+					throw error;
 				}
-
-				this.finishTrace({ response: result, args: input.args });
-				return result;
-			} catch (error) {
-				this.finishTrace({ error, args: input.args });
-				throw error;
-			}
-		});
+			}),
+		);
 	}
 
 	private createTraceContext(
 		input: TraceCreationListenerInput<unknown>,
 	): ActiveTrace {
 		const requestInfo = this.responseSanitizer.getRequestInfo(input.args);
+		const parentContext =
+			parseTraceparent(getTraceparentHeader(requestInfo.request?.headers)) ??
+			getTracePropagationContext();
 		const label = `${input.moduleName}.${input.className}.${input.methodName}`;
 		const rootConsoleEntries: ConsoleEntry[] = [];
+
+		// A non-HTTP root invocation is either a plain provider call (playground)
+		// or a decorated entrypoint firing (rabbit/cron/events). The args can't
+		// tell them apart, so resolve it from the entrypoint the framework
+		// registered for this controller method.
+		const entrypoint =
+			requestInfo.method === "INVOKE" || requestInfo.method === "ENTRYPOINT"
+				? this.findEntrypoint(input.className, input.methodName)
+				: undefined;
+		const method = entrypoint ? "ENTRYPOINT" : requestInfo.method;
+
 		const trace: Trace = {
-			id: `trace-${this.nextTraceId++}`,
-			method: requestInfo.method,
+			id: `${this.serviceName}--trace-${this.nextTraceId++}`,
+			distributedTraceId: parentContext?.traceId ?? createTraceId(),
+			spanId: createSpanId(),
+			parentSpanId: parentContext?.spanId ?? null,
+			serviceName: this.serviceName,
+			method,
+			...(entrypoint
+				? { entrypoint: { type: entrypoint.type, label: entrypoint.label } }
+				: {}),
 			path: requestInfo.path ?? label,
 			url: requestInfo.url ?? label,
 			request: requestInfo.request ?? {
@@ -309,15 +377,15 @@ export class DevtoolsTraceStore {
 		const counter = {
 			nextSpanId: 1,
 		};
-		const playgroundSpanKind = getPlaygroundTraceSpanKind(requestInfo.method);
+		const playgroundSpanKind = getPlaygroundTraceSpanKind(method);
 		const rootSpan: TraceSpan = {
 			id: `${trace.id}:span-0`,
 			parentId: null,
 			kind: playgroundSpanKind ?? "controller",
 			label:
-				requestInfo.method === "INVOKE" || requestInfo.method === "ENTRYPOINT"
+				method === "INVOKE" || method === "ENTRYPOINT"
 					? label
-					: `${requestInfo.method} ${trace.path}`,
+					: `${method} ${trace.path}`,
 			moduleId: null,
 			moduleName: input.moduleName,
 			className: input.className,
@@ -343,6 +411,11 @@ export class DevtoolsTraceStore {
 
 		return {
 			trace,
+			propagationContext: {
+				traceId: trace.distributedTraceId,
+				spanId: trace.spanId,
+				traceFlags: parentContext?.traceFlags ?? "01",
+			},
 			currentSpanId: playgroundSpanKind ? rootSpan.id : null,
 			currentConsoleEntries: rootConsoleEntries,
 			counter,
@@ -435,6 +508,7 @@ export class DevtoolsTraceStore {
 		this.traces.splice(MAX_TRACES);
 		this.trackFinalReply(activeTrace, options.args);
 		this.persistTraces();
+		this.emitTrace(trace);
 	}
 
 	/**
@@ -669,4 +743,42 @@ export class DevtoolsTraceStore {
 			console.error = original.error;
 		};
 	}
+}
+
+function getTraceparentHeader(headers: unknown): string | string[] | undefined {
+	if (!headers || typeof headers !== "object") return undefined;
+
+	const get = (headers as { get?: unknown }).get;
+	if (typeof get === "function") {
+		const value = get.call(headers, "traceparent");
+		return typeof value === "string" ? value : undefined;
+	}
+
+	for (const [name, value] of Object.entries(headers)) {
+		if (name.toLowerCase() !== "traceparent") continue;
+		if (typeof value === "string") return value;
+		if (Array.isArray(value)) {
+			return value.filter((item): item is string => typeof item === "string");
+		}
+	}
+
+	return undefined;
+}
+
+function createTraceId(): string {
+	return createNonZeroHexId(16);
+}
+
+function createSpanId(): string {
+	return createNonZeroHexId(8);
+}
+
+function createNonZeroHexId(byteLength: number): string {
+	let id: string;
+
+	do {
+		id = randomBytes(byteLength).toString("hex");
+	} while (/^0+$/.test(id));
+
+	return id;
 }

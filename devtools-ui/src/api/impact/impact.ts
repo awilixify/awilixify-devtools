@@ -20,8 +20,10 @@ import type {
 	UseSuspenseQueryResult,
 } from "@tanstack/react-query";
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
-
+import { devtoolsFetch } from "../../devtools-fetch";
 import type { GetProviderImpactResponse } from "../model";
+
+type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
 const withQueryKey = <T extends object, K>(
 	query: T,
@@ -52,15 +54,10 @@ export const getGetDevtoolsImpactUrl = () => {
 export const getDevtoolsImpact = async (
 	options?: RequestInit,
 ): Promise<GetProviderImpactResponse> => {
-	const res = await fetch(getGetDevtoolsImpactUrl(), {
+	return devtoolsFetch<GetProviderImpactResponse>(getGetDevtoolsImpactUrl(), {
 		...options,
 		method: "GET",
 	});
-
-	const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-	const data: GetProviderImpactResponse = body ? JSON.parse(body) : {};
-	return data;
 };
 
 export const getGetDevtoolsImpactQueryKey = () => {
@@ -78,15 +75,15 @@ export const getGetDevtoolsImpactQueryOptions = <
 			TData
 		>
 	>;
-	fetch?: RequestInit;
+	request?: SecondParameter<typeof devtoolsFetch>;
 }) => {
-	const { query: queryOptions, fetch: fetchOptions } = options ?? {};
+	const { query: queryOptions, request: requestOptions } = options ?? {};
 
 	const queryKey = queryOptions?.queryKey ?? getGetDevtoolsImpactQueryKey();
 
 	const queryFn: QueryFunction<
 		Awaited<ReturnType<typeof getDevtoolsImpact>>
-	> = ({ signal }) => getDevtoolsImpact({ signal, ...fetchOptions });
+	> = ({ signal }) => getDevtoolsImpact({ signal, ...requestOptions });
 
 	return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
 		Awaited<ReturnType<typeof getDevtoolsImpact>>,
@@ -120,7 +117,7 @@ export function useGetDevtoolsImpact<
 				>,
 				"initialData"
 			>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): DefinedUseQueryResult<TData, TError> & {
@@ -146,7 +143,7 @@ export function useGetDevtoolsImpact<
 				>,
 				"initialData"
 			>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & {
@@ -164,7 +161,7 @@ export function useGetDevtoolsImpact<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & {
@@ -186,7 +183,7 @@ export function useGetDevtoolsImpact<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & {
@@ -213,15 +210,15 @@ export const getGetDevtoolsImpactSuspenseQueryOptions = <
 			TData
 		>
 	>;
-	fetch?: RequestInit;
+	request?: SecondParameter<typeof devtoolsFetch>;
 }) => {
-	const { query: queryOptions, fetch: fetchOptions } = options ?? {};
+	const { query: queryOptions, request: requestOptions } = options ?? {};
 
 	const queryKey = queryOptions?.queryKey ?? getGetDevtoolsImpactQueryKey();
 
 	const queryFn: QueryFunction<
 		Awaited<ReturnType<typeof getDevtoolsImpact>>
-	> = ({ signal }) => getDevtoolsImpact({ signal, ...fetchOptions });
+	> = ({ signal }) => getDevtoolsImpact({ signal, ...requestOptions });
 
 	return { queryKey, queryFn, ...queryOptions } as UseSuspenseQueryOptions<
 		Awaited<ReturnType<typeof getDevtoolsImpact>>,
@@ -247,7 +244,7 @@ export function useGetDevtoolsImpactSuspense<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseSuspenseQueryResult<TData, TError> & {
@@ -265,7 +262,7 @@ export function useGetDevtoolsImpactSuspense<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseSuspenseQueryResult<TData, TError> & {
@@ -283,7 +280,7 @@ export function useGetDevtoolsImpactSuspense<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseSuspenseQueryResult<TData, TError> & {
@@ -305,7 +302,7 @@ export function useGetDevtoolsImpactSuspense<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseSuspenseQueryResult<TData, TError> & {

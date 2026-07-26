@@ -17,6 +17,11 @@ import type { TraceSpanStatus } from "./traceSpanStatus";
  */
 export type GetTraceResponseData = {
 	id: string;
+	distributedTraceId: string;
+	spanId: string;
+	/** @nullable */
+	parentSpanId: string | null;
+	serviceName: string;
 	method: string;
 	path: string;
 	url: string;

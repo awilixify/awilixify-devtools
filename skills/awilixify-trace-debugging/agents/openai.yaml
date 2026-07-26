@@ -1,0 +1,4 @@
+interface:
+  display_name: "Awilixify Trace Debugging"
+  short_description: "Diagnose runtime bugs with correlated traces"
+  default_prompt: "Use $awilixify-trace-debugging to reproduce the referenced issue, analyze its distributed trace, fix the evidenced bug, and verify the result."

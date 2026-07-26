@@ -3,6 +3,7 @@ import { type Static, Type } from "@sinclair/typebox";
 export const GetSettingsResponseSchema = Type.Object(
 	{
 		appUrl: Type.Union([Type.String(), Type.Null()]),
+		serviceName: Type.String(),
 	},
 	{ $id: "GetSettingsResponse" },
 );
@@ -16,5 +17,5 @@ export const GetSettingsSchema = {
 	tags: ["Settings"],
 	summary: "Get devtools settings",
 	description:
-		"Returns devtools configuration such as the URL of the proxied app",
+		"Returns the service identity and DevTools configuration",
 };

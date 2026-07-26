@@ -1,17 +1,16 @@
-import type {
-	GetGraphResponse,
-	ModuleGraphEdge,
-	ModuleGraphNode,
-} from "@/api/model";
+import type { ModuleGraphNode } from "@/api/model";
+import type { GraphData } from "../types";
+import { getModuleSelectionRelations } from "./module-selection-relations";
+import { getOperationConnections } from "./operation-flow-edges";
 
 // Client-side "impact only" filter. Kept on the FE so toggling it filters the
 // already-fetched graph instead of hitting the backend. Search is intentionally
 // NOT a filter — it only drives the minimap highlight and camera focus (see
 // use-graph-flow), so the full graph stays on screen while searching.
 export function filterGraphByImpact(
-	graph: GetGraphResponse,
+	graph: GraphData,
 	{ impactOnly }: { impactOnly: boolean },
-): GetGraphResponse {
+): GraphData {
 	if (!impactOnly) return graph;
 
 	const moduleIds = new Set(
@@ -29,13 +28,34 @@ export function filterGraphByImpact(
 	};
 }
 
+export function filterGraphByServices(
+	graph: GraphData,
+	visibleServiceNames: ReadonlySet<string>,
+): GraphData {
+	const modules = graph.modules.filter((module) =>
+		visibleServiceNames.has(module.serviceName),
+	);
+	const moduleIds = new Set(modules.map((module) => module.id));
+
+	return {
+		...graph,
+		modules,
+		edges: graph.edges.filter(
+			(edge) => moduleIds.has(edge.from) && moduleIds.has(edge.to),
+		),
+		globalProviderGroups: graph.globalProviderGroups.filter((group) =>
+			moduleIds.has(group.moduleId),
+		),
+	};
+}
+
 // "Related only" for a selected module: keep the module and its direct
 // neighbours. Skipped when a provider is focused (filterProviderFocusGraph
 // owns that case) or when nothing is selected. This used to be the backend's
 // `relatedTo` filter; it moved here because the selected id can be a group id
 // that only exists on the client.
 export function filterGraphByRelated(
-	graph: GetGraphResponse,
+	graph: GraphData,
 	{
 		selectedModuleId,
 		showRelatedOnly,
@@ -45,13 +65,20 @@ export function filterGraphByRelated(
 		showRelatedOnly: boolean;
 		hasProviderFocus: boolean;
 	},
-): GetGraphResponse {
+): GraphData {
 	if (!showRelatedOnly || !selectedModuleId || hasProviderFocus) return graph;
 
-	const moduleIds = getIdsWithDirectNeighbours(
+	const relations = getModuleSelectionRelations(
 		graph.edges,
-		new Set([selectedModuleId]),
+		getOperationConnections(graph.modules),
+		selectedModuleId,
 	);
+	const moduleIds = new Set([
+		selectedModuleId,
+		...relations.asyncIds,
+		...relations.dependencyIds,
+		...relations.dependentIds,
+	]);
 
 	return {
 		...graph,
@@ -60,20 +87,6 @@ export function filterGraphByRelated(
 			(edge) => moduleIds.has(edge.from) && moduleIds.has(edge.to),
 		),
 	};
-}
-
-function getIdsWithDirectNeighbours(
-	edges: ModuleGraphEdge[],
-	moduleIds: Set<string>,
-): Set<string> {
-	const relatedIds = new Set(moduleIds);
-
-	for (const edge of edges) {
-		if (moduleIds.has(edge.from)) relatedIds.add(edge.to);
-		if (moduleIds.has(edge.to)) relatedIds.add(edge.from);
-	}
-
-	return relatedIds;
 }
 
 function moduleHasImpact(module: ModuleGraphNode): boolean {

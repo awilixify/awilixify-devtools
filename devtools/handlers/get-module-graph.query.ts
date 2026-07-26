@@ -55,11 +55,21 @@ export class GetModuleGraphQueryHandler
 		const nonGlobalEdges = graph.edges.filter((edge) => edge.type !== "global");
 		const edges = this.dedupeEdges(nonGlobalEdges, shaped.sourceToVisibleId);
 		const edgeCounts = this.getEdgeCounts(edges);
+		const decoratorArguments =
+			this.decoratorScanner.getDecoratorArgumentsByKey();
 
 		return {
+			serviceName: graph.serviceName,
 			globalProviderGroups,
 			modules: shaped.modules.map((module) => ({
 				...module,
+				entrypoints: module.entrypoints.map((entrypoint) => ({
+					...entrypoint,
+					decoratorArguments:
+						decoratorArguments[
+							`${entrypoint.controller}.${entrypoint.handler}.${entrypoint.decoratorName}`
+						] ?? entrypoint.decoratorArguments,
+				})),
 				dependencyCount: edgeCounts.dependencyCount.get(module.id) ?? 0,
 				dependentCount: edgeCounts.dependentCount.get(module.id) ?? 0,
 				impact: impactByModule[module.id] ?? emptyImpact,

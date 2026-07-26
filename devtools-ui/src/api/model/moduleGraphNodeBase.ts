@@ -7,6 +7,7 @@
  */
 import type { DynamicModuleInfo } from "./dynamicModuleInfo";
 import type { ModuleGraphEntrypoint } from "./moduleGraphEntrypoint";
+import type { ModuleGraphMessageRef } from "./moduleGraphMessageRef";
 import type { ModuleGraphNodeBaseCommandHandlerKeys } from "./moduleGraphNodeBaseCommandHandlerKeys";
 import type { ModuleGraphNodeBaseCommandPreHandlerClassNames } from "./moduleGraphNodeBaseCommandPreHandlerClassNames";
 import type { ModuleGraphNodeBaseCommandPreHandlerLifetimeTypes } from "./moduleGraphNodeBaseCommandPreHandlerLifetimeTypes";
@@ -27,6 +28,7 @@ import type { ModuleGraphNodeBaseQueryHandlerKeys } from "./moduleGraphNodeBaseQ
 import type { ModuleGraphNodeBaseQueryPreHandlerClassNames } from "./moduleGraphNodeBaseQueryPreHandlerClassNames";
 import type { ModuleGraphNodeBaseQueryPreHandlerLifetimeTypes } from "./moduleGraphNodeBaseQueryPreHandlerLifetimeTypes";
 import type { ModuleGraphNodeKind } from "./moduleGraphNodeKind";
+import type { ModuleGraphOperationRef } from "./moduleGraphOperationRef";
 
 export interface ModuleGraphNodeBase {
 	id: string;
@@ -72,4 +74,8 @@ export interface ModuleGraphNodeBase {
 	initializerExports: string[];
 	initializerClassNames: ModuleGraphNodeBaseInitializerClassNames;
 	entrypoints: ModuleGraphEntrypoint[];
+	ownOperationIds: string[];
+	calledOperations: ModuleGraphOperationRef[];
+	publishedMessageTypes: string[];
+	subscribedMessages: ModuleGraphMessageRef[];
 }

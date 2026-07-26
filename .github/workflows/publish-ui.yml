@@ -21,7 +21,7 @@ jobs:
       contents: write
       packages: write
     env:
-      IMAGE_NAME: ghcr.io/wildstyles/awilixify-devtools-ui
+      IMAGE_NAME: ghcr.io/awilixify/awilixify-devtools-ui
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v6

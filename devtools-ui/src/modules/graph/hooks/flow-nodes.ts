@@ -1,13 +1,21 @@
 import clsx from "clsx";
 import type { GetGraphResponse } from "@/api/model";
 import type {
+	GraphData,
 	GraphViewMode,
 	ModuleFlowNode,
 	ModuleNodeData,
 	ModuleStatCount,
 	ModuleStats,
+	OperationConnection,
 	ProviderFocusState,
 } from "../types";
+import type { ModuleSelectionRelations } from "./module-selection-relations";
+import { getOperationConnectionId } from "./module-selection-relations";
+import {
+	getOperationConnectionBorderStyle,
+	getOperationConnectionColor,
+} from "./operation-flow-edges";
 import {
 	getGlobalProviderGroups,
 	getImportedProviderGroups,
@@ -21,35 +29,66 @@ import { providerNodeHeight } from "./provider-node-metrics";
 export function toFlowNodes({
 	graph,
 	providerFocus,
+	operationConnections,
 	selectedModuleId,
+	selectionRelations,
 	viewMode,
 }: {
-	graph: GetGraphResponse;
+	graph: GraphData;
 	providerFocus: ProviderFocusState | null;
+	operationConnections: OperationConnection[];
 	selectedModuleId?: string | null;
+	selectionRelations: ModuleSelectionRelations;
 	viewMode: GraphViewMode;
 }): ModuleFlowNode[] {
 	const { modules, edges, globalProviderGroups } = graph;
 
 	const moduleById = new Map(modules.map((module) => [module.id, module]));
 	const globalModules = modules.filter((module) => module.kind === "global");
-	const directDependencyIds = getDirectDependencyIds(edges, selectedModuleId);
+	const globalModulesByService = new Map<string, typeof globalModules>();
+	const globalProviderGroupsByService = new Map<
+		string,
+		typeof globalProviderGroups
+	>();
+
+	for (const globalModule of globalModules) {
+		const serviceModules =
+			globalModulesByService.get(globalModule.serviceName) ?? [];
+		serviceModules.push(globalModule);
+		globalModulesByService.set(globalModule.serviceName, serviceModules);
+	}
+
+	for (const providerGroup of globalProviderGroups) {
+		const serviceName = moduleById.get(providerGroup.moduleId)?.serviceName;
+		if (!serviceName) {
+			continue;
+		}
+
+		const serviceProviderGroups =
+			globalProviderGroupsByService.get(serviceName) ?? [];
+		serviceProviderGroups.push(providerGroup);
+		globalProviderGroupsByService.set(serviceName, serviceProviderGroups);
+	}
+	const providerDependencyIds = selectionRelations.dependencyIds;
 	const providerGroupColorByModuleId = getProviderGroupColorByModuleId(
 		edges,
 		selectedModuleId,
 	);
 	const lifetimeTypeByName = getLifetimeTypeByName(modules);
-	// availableDecorators (static analysis, keyed by class name) isn't in the
-	// generated client type yet (pending `npm run generate:api`), so it's read
-	// through a cast. Owner modules show these; importers show only used ones.
-	const availableDecoratorsByClassName =
-		(graph as { availableDecorators?: Record<string, string[]> })
-			.availableDecorators ?? {};
+	const availableDecoratorsByClassName = graph.availableDecorators;
+	const entrypointRelationByModuleId = getEntrypointRelations(
+		operationConnections,
+		selectionRelations,
+	);
 	return modules.map((module) => {
+		const serviceGlobalModules =
+			globalModulesByService.get(module.serviceName) ?? [];
+		const serviceGlobalProviderGroups =
+			globalProviderGroupsByService.get(module.serviceName) ?? [];
 		const usedDecoratorsByKey = getUsedDecoratorsByKey(module);
 		const globalProviderGroupsDetailed = getGlobalProviderGroups(
-			globalProviderGroups,
-			globalModules,
+			serviceGlobalProviderGroups,
+			serviceGlobalModules,
 			lifetimeTypeByName,
 			availableDecoratorsByClassName,
 			usedDecoratorsByKey,
@@ -64,20 +103,14 @@ export function toFlowNodes({
 			availableDecoratorsByClassName,
 			providerGroupColorByModuleId,
 		);
-		const providerNaming = module as unknown as {
-			providerClassNames?: Record<string, string>;
-			providerValues?: Record<string, string>;
-		};
 		const nodeData: ModuleNodeData = {
 			...module,
-			providerClassNames: providerNaming.providerClassNames ?? {},
-			providerValues: providerNaming.providerValues ?? {},
-			globalProviderGroups,
+			globalProviderGroups: serviceGlobalProviderGroups,
 			globalProviderGroupsDetailed,
 			importedProviderGroups,
 			moduleStats: getModuleStats({
 				edges,
-				globalModules,
+				globalModules: serviceGlobalModules,
 				module,
 				moduleById,
 			}),
@@ -85,15 +118,18 @@ export function toFlowNodes({
 				used: usedDecoratorsByKey[key] ?? [],
 				available: availableDecoratorsByClassName[className] ?? [],
 			})),
+			entrypointRelationByOperationKey:
+				entrypointRelationByModuleId.get(module.id) ?? {},
 			isSelectedModule: module.id === selectedModuleId,
 			lifetimeTypeByName,
 			providerFocus,
 			providerRelationColor:
 				viewMode === "providers" &&
 				selectedModuleId &&
-				directDependencyIds.has(module.id)
+				providerDependencyIds.has(module.id)
 					? providerGroupColorByModuleId[module.id]
 					: undefined,
+			viewMode,
 		};
 
 		const isGlobal = module.kind === "global";
@@ -102,7 +138,11 @@ export function toFlowNodes({
 			id: module.id,
 			type: "module",
 			data: nodeData,
-			className: getNodeClassName(nodeData, selectedModuleId, edges),
+			className: getNodeClassName(
+				nodeData,
+				selectedModuleId,
+				selectionRelations,
+			),
 			position: { x: 0, y: 0 },
 			width:
 				viewMode === "providers"
@@ -120,6 +160,34 @@ export function toFlowNodes({
 						: 150,
 		};
 	});
+}
+
+function getEntrypointRelations(
+	operationConnections: OperationConnection[],
+	selectionRelations: ModuleSelectionRelations,
+): Map<string, ModuleNodeData["entrypointRelationByOperationKey"]> {
+	const relationsByModuleId = new Map<
+		string,
+		ModuleNodeData["entrypointRelationByOperationKey"]
+	>();
+
+	for (const connection of operationConnections) {
+		const connectionId = getOperationConnectionId(connection);
+		const active =
+			selectionRelations.asyncOperationEdgeIds.has(connectionId) ||
+			selectionRelations.dependencyOperationEdgeIds.has(connectionId) ||
+			selectionRelations.dependentOperationEdgeIds.has(connectionId);
+		if (!active) continue;
+
+		const moduleRelations = relationsByModuleId.get(connection.to) ?? {};
+		moduleRelations[connection.operationKey] = {
+			borderStyle: getOperationConnectionBorderStyle(connection),
+			color: getOperationConnectionColor(connection),
+		};
+		relationsByModuleId.set(connection.to, moduleRelations);
+	}
+
+	return relationsByModuleId;
 }
 
 function getModuleStats({
@@ -239,11 +307,8 @@ function getProviderBlockRowCounts(module: ModuleNodeData): number[] {
 function getNodeClassName(
 	module: ModuleNodeData,
 	selectedId: string | null | undefined,
-	edges: GetGraphResponse["edges"],
+	relations: ModuleSelectionRelations,
 ) {
-	const directDependencyIds = getDirectDependencyIds(edges, selectedId);
-	const directDependentIds = getDirectDependentIds(edges, selectedId);
-
 	return clsx({
 		"dynamic-graph-node": module.familyInstanceCount > 1 || module.dynamic,
 		"global-graph-node": module.kind === "global",
@@ -251,38 +316,23 @@ function getNodeClassName(
 		"dependency-graph-node":
 			selectedId &&
 			module.id !== selectedId &&
-			directDependencyIds.has(module.id),
+			relations.dependencyIds.has(module.id),
 		"dependent-graph-node":
 			selectedId &&
 			module.id !== selectedId &&
-			!directDependencyIds.has(module.id) &&
-			directDependentIds.has(module.id),
+			!relations.dependencyIds.has(module.id) &&
+			relations.dependentIds.has(module.id),
+		"async-graph-node":
+			selectedId &&
+			module.id !== selectedId &&
+			!relations.dependencyIds.has(module.id) &&
+			!relations.dependentIds.has(module.id) &&
+			relations.asyncIds.has(module.id),
 		"dimmed-graph-node":
 			selectedId &&
 			module.id !== selectedId &&
-			!directDependencyIds.has(module.id) &&
-			!directDependentIds.has(module.id),
+			!relations.dependencyIds.has(module.id) &&
+			!relations.dependentIds.has(module.id) &&
+			!relations.asyncIds.has(module.id),
 	});
-}
-
-function getDirectDependencyIds(
-	edges: GetGraphResponse["edges"],
-	selectedModuleId: string | null | undefined,
-): Set<string> {
-	return new Set(
-		edges
-			.filter((edge) => edge.from === selectedModuleId)
-			.map((edge) => edge.to),
-	);
-}
-
-function getDirectDependentIds(
-	edges: GetGraphResponse["edges"],
-	selectedModuleId: string | null | undefined,
-): Set<string> {
-	return new Set(
-		edges
-			.filter((edge) => edge.to === selectedModuleId)
-			.map((edge) => edge.from),
-	);
 }

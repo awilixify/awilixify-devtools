@@ -17,6 +17,9 @@ export class GetSettingsQueryHandler
 	constructor(private readonly options: Deps["options"]) {}
 
 	async executor(): Promise<Response> {
-		return { appUrl: this.options.appUrl ?? null };
+		return {
+			appUrl: this.options.appUrl ?? null,
+			serviceName: this.options.serviceName,
+		};
 	}
 }

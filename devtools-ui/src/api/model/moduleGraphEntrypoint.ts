@@ -13,5 +13,6 @@ export interface ModuleGraphEntrypoint {
 	handler: string;
 	initializerKey: string;
 	decoratorName?: string;
+	decoratorArguments?: string;
 	metadata?: unknown;
 }

@@ -20,8 +20,10 @@ import type {
 	UseSuspenseQueryResult,
 } from "@tanstack/react-query";
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
-
+import { devtoolsFetch } from "../../devtools-fetch";
 import type { GetGraphResponse, GetModuleDetailsResponse } from "../model";
+
+type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
 const withQueryKey = <T extends object, K>(
 	query: T,
@@ -52,15 +54,10 @@ export const getGetDevtoolsGraphUrl = () => {
 export const getDevtoolsGraph = async (
 	options?: RequestInit,
 ): Promise<GetGraphResponse> => {
-	const res = await fetch(getGetDevtoolsGraphUrl(), {
+	return devtoolsFetch<GetGraphResponse>(getGetDevtoolsGraphUrl(), {
 		...options,
 		method: "GET",
 	});
-
-	const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-	const data: GetGraphResponse = body ? JSON.parse(body) : {};
-	return data;
 };
 
 export const getGetDevtoolsGraphQueryKey = () => {
@@ -74,15 +71,15 @@ export const getGetDevtoolsGraphQueryOptions = <
 	query?: Partial<
 		UseQueryOptions<Awaited<ReturnType<typeof getDevtoolsGraph>>, TError, TData>
 	>;
-	fetch?: RequestInit;
+	request?: SecondParameter<typeof devtoolsFetch>;
 }) => {
-	const { query: queryOptions, fetch: fetchOptions } = options ?? {};
+	const { query: queryOptions, request: requestOptions } = options ?? {};
 
 	const queryKey = queryOptions?.queryKey ?? getGetDevtoolsGraphQueryKey();
 
 	const queryFn: QueryFunction<
 		Awaited<ReturnType<typeof getDevtoolsGraph>>
-	> = ({ signal }) => getDevtoolsGraph({ signal, ...fetchOptions });
+	> = ({ signal }) => getDevtoolsGraph({ signal, ...requestOptions });
 
 	return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
 		Awaited<ReturnType<typeof getDevtoolsGraph>>,
@@ -116,7 +113,7 @@ export function useGetDevtoolsGraph<
 				>,
 				"initialData"
 			>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): DefinedUseQueryResult<TData, TError> & {
@@ -142,7 +139,7 @@ export function useGetDevtoolsGraph<
 				>,
 				"initialData"
 			>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & {
@@ -160,7 +157,7 @@ export function useGetDevtoolsGraph<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & {
@@ -182,7 +179,7 @@ export function useGetDevtoolsGraph<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & {
@@ -209,15 +206,15 @@ export const getGetDevtoolsGraphSuspenseQueryOptions = <
 			TData
 		>
 	>;
-	fetch?: RequestInit;
+	request?: SecondParameter<typeof devtoolsFetch>;
 }) => {
-	const { query: queryOptions, fetch: fetchOptions } = options ?? {};
+	const { query: queryOptions, request: requestOptions } = options ?? {};
 
 	const queryKey = queryOptions?.queryKey ?? getGetDevtoolsGraphQueryKey();
 
 	const queryFn: QueryFunction<
 		Awaited<ReturnType<typeof getDevtoolsGraph>>
-	> = ({ signal }) => getDevtoolsGraph({ signal, ...fetchOptions });
+	> = ({ signal }) => getDevtoolsGraph({ signal, ...requestOptions });
 
 	return { queryKey, queryFn, ...queryOptions } as UseSuspenseQueryOptions<
 		Awaited<ReturnType<typeof getDevtoolsGraph>>,
@@ -243,7 +240,7 @@ export function useGetDevtoolsGraphSuspense<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseSuspenseQueryResult<TData, TError> & {
@@ -261,7 +258,7 @@ export function useGetDevtoolsGraphSuspense<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseSuspenseQueryResult<TData, TError> & {
@@ -279,7 +276,7 @@ export function useGetDevtoolsGraphSuspense<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseSuspenseQueryResult<TData, TError> & {
@@ -301,7 +298,7 @@ export function useGetDevtoolsGraphSuspense<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseSuspenseQueryResult<TData, TError> & {
@@ -331,15 +328,13 @@ export const getDevtoolsGraphModulesModuleId = async (
 	moduleId: string,
 	options?: RequestInit,
 ): Promise<GetModuleDetailsResponse> => {
-	const res = await fetch(getGetDevtoolsGraphModulesModuleIdUrl(moduleId), {
-		...options,
-		method: "GET",
-	});
-
-	const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-	const data: GetModuleDetailsResponse = body ? JSON.parse(body) : {};
-	return data;
+	return devtoolsFetch<GetModuleDetailsResponse>(
+		getGetDevtoolsGraphModulesModuleIdUrl(moduleId),
+		{
+			...options,
+			method: "GET",
+		},
+	);
 };
 
 export const getGetDevtoolsGraphModulesModuleIdQueryKey = (
@@ -361,10 +356,10 @@ export const getGetDevtoolsGraphModulesModuleIdQueryOptions = <
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 ) => {
-	const { query: queryOptions, fetch: fetchOptions } = options ?? {};
+	const { query: queryOptions, request: requestOptions } = options ?? {};
 
 	const queryKey =
 		queryOptions?.queryKey ??
@@ -373,7 +368,7 @@ export const getGetDevtoolsGraphModulesModuleIdQueryOptions = <
 	const queryFn: QueryFunction<
 		Awaited<ReturnType<typeof getDevtoolsGraphModulesModuleId>>
 	> = ({ signal }) =>
-		getDevtoolsGraphModulesModuleId(moduleId, { signal, ...fetchOptions });
+		getDevtoolsGraphModulesModuleId(moduleId, { signal, ...requestOptions });
 
 	return {
 		queryKey,
@@ -413,7 +408,7 @@ export function useGetDevtoolsGraphModulesModuleId<
 				>,
 				"initialData"
 			>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): DefinedUseQueryResult<TData, TError> & {
@@ -440,7 +435,7 @@ export function useGetDevtoolsGraphModulesModuleId<
 				>,
 				"initialData"
 			>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & {
@@ -459,7 +454,7 @@ export function useGetDevtoolsGraphModulesModuleId<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & {
@@ -482,7 +477,7 @@ export function useGetDevtoolsGraphModulesModuleId<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & {
@@ -514,10 +509,10 @@ export const getGetDevtoolsGraphModulesModuleIdSuspenseQueryOptions = <
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 ) => {
-	const { query: queryOptions, fetch: fetchOptions } = options ?? {};
+	const { query: queryOptions, request: requestOptions } = options ?? {};
 
 	const queryKey =
 		queryOptions?.queryKey ??
@@ -526,7 +521,7 @@ export const getGetDevtoolsGraphModulesModuleIdSuspenseQueryOptions = <
 	const queryFn: QueryFunction<
 		Awaited<ReturnType<typeof getDevtoolsGraphModulesModuleId>>
 	> = ({ signal }) =>
-		getDevtoolsGraphModulesModuleId(moduleId, { signal, ...fetchOptions });
+		getDevtoolsGraphModulesModuleId(moduleId, { signal, ...requestOptions });
 
 	return { queryKey, queryFn, ...queryOptions } as UseSuspenseQueryOptions<
 		Awaited<ReturnType<typeof getDevtoolsGraphModulesModuleId>>,
@@ -553,7 +548,7 @@ export function useGetDevtoolsGraphModulesModuleIdSuspense<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseSuspenseQueryResult<TData, TError> & {
@@ -572,7 +567,7 @@ export function useGetDevtoolsGraphModulesModuleIdSuspense<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseSuspenseQueryResult<TData, TError> & {
@@ -591,7 +586,7 @@ export function useGetDevtoolsGraphModulesModuleIdSuspense<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseSuspenseQueryResult<TData, TError> & {
@@ -614,7 +609,7 @@ export function useGetDevtoolsGraphModulesModuleIdSuspense<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseSuspenseQueryResult<TData, TError> & {

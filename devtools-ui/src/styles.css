@@ -5,6 +5,10 @@
 	--graph-color-dependency-bg: var(--mantine-color-blue-0);
 	--graph-color-dependent: var(--mantine-color-yellow-7);
 	--graph-color-dependent-bg: var(--mantine-color-yellow-0);
+	--graph-color-async: var(--mantine-color-pink-7);
+	--graph-color-async-bg: var(--mantine-color-pink-0);
+	--graph-color-http-call: var(--mantine-color-cyan-7);
+	--graph-color-message-call: var(--mantine-color-orange-7);
 	--graph-color-global: var(--mantine-color-grape-6);
 	--graph-color-global-bg: var(--mantine-color-grape-0);
 	--graph-color-cycle: var(--mantine-color-red-7);
@@ -66,6 +70,14 @@ body {
 	height: 100%;
 }
 
+.graph-target-error {
+	position: absolute;
+	z-index: 5;
+	top: 16px;
+	right: 16px;
+	max-width: min(520px, calc(100% - 32px));
+}
+
 .react-flow__handle {
 	width: 0;
 	height: 0;
@@ -76,34 +88,32 @@ body {
 }
 
 .react-flow__edges {
-	z-index: 0;
-}
-
-.react-flow__nodes {
 	z-index: 1;
 }
 
-.global-modules-band {
+.react-flow__nodes {
+	z-index: 2;
+}
+
+.service-graph-band {
 	position: absolute;
 	z-index: 0;
 	pointer-events: none;
-	border: 1px solid
-		color-mix(in srgb, var(--graph-color-global) 40%, transparent);
+	border: 2px solid var(--mantine-color-gray-4);
 	border-radius: 8px;
-	background: color-mix(in srgb, var(--graph-color-global) 8%, transparent);
+	background: color-mix(in srgb, var(--mantine-color-white) 78%, transparent);
 	box-shadow: inset 0 0 0 1px
-		color-mix(in srgb, var(--graph-color-global) 14%, transparent);
+		color-mix(in srgb, var(--mantine-color-gray-3) 55%, transparent);
 }
 
-.global-modules-band-label {
+.service-graph-band-label {
 	position: absolute;
-	top: 8px;
-	left: 12px;
-	color: var(--graph-color-global);
-	font-size: 11px;
+	top: 14px;
+	left: 18px;
+	color: var(--mantine-color-gray-8);
+	font-size: 13px;
 	font-weight: 700;
 	line-height: 1;
-	text-transform: uppercase;
 }
 
 [data-module-node] {
@@ -146,6 +156,11 @@ body {
 	background: var(--graph-color-dependent-bg);
 }
 
+.react-flow__node.async-graph-node [data-module-node] {
+	border-color: var(--graph-color-async);
+	background: var(--graph-color-async-bg);
+}
+
 .react-flow__node.search-match-graph-node [data-module-node] {
 	border-color: var(--graph-color-search);
 	background: var(--graph-color-search-bg);
@@ -179,12 +194,43 @@ body {
 	--graph-edge-color: var(--graph-color-dependent);
 }
 
+.react-flow__edge.graph-edge.async {
+	--graph-edge-color: var(--graph-color-async);
+}
+
+.react-flow__edge.graph-edge.http-call {
+	--graph-edge-color: var(--graph-color-http-call);
+}
+
+.react-flow__edge.graph-edge.message-call {
+	--graph-edge-color: var(--graph-color-message-call);
+}
+
 .react-flow__edge.graph-edge.global {
 	--graph-edge-color: var(--graph-color-global);
 }
 
 .react-flow__edge.graph-edge.global path {
 	stroke-dasharray: 6 4;
+}
+
+.react-flow__edge.graph-edge.operation {
+	--graph-edge-color: var(--graph-color-muted);
+	opacity: 1;
+}
+
+.react-flow__edge.graph-edge.operation path {
+	stroke-width: 3;
+}
+
+.react-flow__edge.graph-edge.operation.messaging path {
+	stroke-dasharray: 2 7;
+	stroke-linecap: round;
+}
+
+.react-flow__edge.graph-edge.operation.publication path {
+	stroke-dasharray: 10 6;
+	stroke-linecap: butt;
 }
 
 .react-flow__edge.graph-edge.cycle {
@@ -202,6 +248,10 @@ body {
 }
 
 .react-flow__edge:not(.selected).graph-edge.provider-colored {
+	opacity: 1;
+}
+
+.react-flow__edge:not(.selected).graph-edge.operation {
 	opacity: 1;
 }
 

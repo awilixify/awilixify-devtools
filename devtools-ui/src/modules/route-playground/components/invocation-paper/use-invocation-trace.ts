@@ -1,11 +1,12 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { useRef } from "react";
+import { useCallback, useRef } from "react";
 import type { GetTracesResponse, Trace } from "@/api/model";
 import { TraceSpanStatus } from "@/api/model";
+import { useTargets } from "../../../targets/TargetsContext";
 import {
-	getGetDevtoolsTracesQueryKey,
-	useGetDevtoolsTraces,
-} from "@/api/traces/traces";
+	getEntryTracesQueryKey,
+	useRefreshEntryTraces,
+} from "../../entry-traces";
 import {
 	RoutePlaygroundViewModes,
 	useRoutePlaygroundSettings,
@@ -27,15 +28,27 @@ export function isSyntheticTrace(trace: Trace): boolean {
 
 export function useInvocationTrace() {
 	const queryClient = useQueryClient();
+	const refreshEntryTraces = useRefreshEntryTraces();
 	const { setSelectedTraceId, setViewMode } = useRoutePlaygroundSettings();
-	const { data: traces = [], refetch } = useGetDevtoolsTraces();
+	const { selectedTarget } = useTargets();
 
+	// History and details read per-service entry traces, and a route request is
+	// sent to the active playground target — so detect the newly recorded trace
+	// from that target's entry traces, not the origin-only default query.
+	const entryTracesKey = getEntryTracesQueryKey(selectedTarget.serviceName);
 	const previousFirstTraceIdRef = useRef<string | undefined>(undefined);
 
+	const readEntryTraces = useCallback(
+		(): Trace[] =>
+			queryClient.getQueryData<GetTracesResponse>(entryTracesKey) ?? [],
+		[queryClient, entryTracesKey],
+	);
+
+	const newestRealTraceId = (traces: Trace[]): string | undefined =>
+		traces.find((trace) => !isSyntheticTrace(trace))?.id;
+
 	const startInvocation = () => {
-		previousFirstTraceIdRef.current = traces.find(
-			(trace) => !isSyntheticTrace(trace),
-		)?.id;
+		previousFirstTraceIdRef.current = newestRealTraceId(readEntryTraces());
 		setSelectedTraceId(null);
 	};
 
@@ -43,21 +56,29 @@ export function useInvocationTrace() {
 		fallback: SyntheticTraceInput,
 		traceId?: string,
 	) => {
-		const result = await refetch();
-		const newFirstTraceId = traceId ?? result.data?.[0]?.id;
+		await refreshEntryTraces();
+
+		const newFirstTraceId = traceId ?? newestRealTraceId(readEntryTraces());
 
 		if (
 			newFirstTraceId &&
 			newFirstTraceId !== previousFirstTraceIdRef.current
 		) {
-			setSelectedTraceId(newFirstTraceId);
+			// Late distributed legs arrive via the SSE trace stream, so no polling.
+			setSelectedTraceId(newFirstTraceId, "full");
 			setViewMode(RoutePlaygroundViewModes.trace);
 			return;
 		}
 
-		const syntheticTrace = createSyntheticTrace(fallback);
+		// No trace was recorded (e.g. the request never reached a traced handler);
+		// show the raw response via a synthetic entry. No follow-up refresh here —
+		// it would wipe the synthetic before the user sees it.
+		const syntheticTrace = createSyntheticTrace(
+			fallback,
+			selectedTarget.serviceName,
+		);
 		queryClient.setQueryData<GetTracesResponse>(
-			getGetDevtoolsTracesQueryKey(),
+			entryTracesKey,
 			(current = []) => [syntheticTrace, ...current],
 		);
 		setSelectedTraceId(syntheticTrace.id);
@@ -67,9 +88,18 @@ export function useInvocationTrace() {
 	return { startInvocation, finishInvocation };
 }
 
-function createSyntheticTrace(input: SyntheticTraceInput): Trace {
+function createSyntheticTrace(
+	input: SyntheticTraceInput,
+	serviceName: string,
+): Trace {
+	const id = `${SYNTHETIC_TRACE_ID_PREFIX}${crypto.randomUUID()}`;
+
 	return {
-		id: `${SYNTHETIC_TRACE_ID_PREFIX}${crypto.randomUUID()}`,
+		id,
+		distributedTraceId: id,
+		spanId: id,
+		parentSpanId: null,
+		serviceName,
 		method: input.method,
 		path: input.url,
 		url: input.url,

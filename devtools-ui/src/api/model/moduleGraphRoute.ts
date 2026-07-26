@@ -12,5 +12,6 @@ export interface ModuleGraphRoute {
 	path: string;
 	controller: string;
 	handler: string;
+	operationId: string;
 	schema?: RouteSchema;
 }

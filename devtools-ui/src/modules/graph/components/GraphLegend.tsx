@@ -50,6 +50,7 @@ export function GraphLegend() {
 						label="Dependency"
 					/>
 					<LegendItem color="var(--graph-color-dependent)" label="Dependent" />
+					<LegendItem color="var(--graph-color-async)" label="Async relation" />
 					<LegendItem color="var(--graph-color-global)" label="Global" />
 					<LegendItem
 						color="var(--graph-color-dynamic)"
@@ -153,33 +154,63 @@ export function GraphLegend() {
 
 			<Divider />
 
-			<Stack gap={compactGap}>
-				<Text c="dimmed" fw={700} size="xs">
-					Members
-				</Text>
-
-				{MEMBER_KINDS.map(({ kind, label }) => (
-					<Group gap={compactGap} key={kind} wrap="nowrap">
-						<Badge
-							color={getMemberKindColor(kind)}
-							radius="sm"
-							size="xs"
-							tt="none"
-							variant="light"
-						>
-							{getMemberKindLabel(kind)}
-						</Badge>
-						<Text size="xs">{label}</Text>
-					</Group>
-				))}
-				<Group gap={compactGap} wrap="nowrap">
-					<Text c="grape" fw={700} size="xs" style={{ width: 18 }}>
-						@1
+			<Group align="flex-start" gap="md" grow wrap="nowrap">
+				<Stack gap={compactGap}>
+					<Text c="dimmed" fw={700} size="xs">
+						Members
 					</Text>
-					<Text size="xs">Decorator count</Text>
-				</Group>
-			</Stack>
+
+					{MEMBER_KINDS.map(({ kind, label }) => (
+						<Group gap={compactGap} key={kind} wrap="nowrap">
+							<Badge
+								color={getMemberKindColor(kind)}
+								radius="sm"
+								size="xs"
+								tt="none"
+								variant="light"
+							>
+								{getMemberKindLabel(kind)}
+							</Badge>
+							<Text size="xs">{label}</Text>
+						</Group>
+					))}
+					<Group gap={compactGap} wrap="nowrap">
+						<Text c="grape" fw={700} size="xs" style={{ width: 18 }}>
+							@1
+						</Text>
+						<Text size="xs">Decorator count</Text>
+					</Group>
+				</Stack>
+
+				<Stack gap={compactGap}>
+					<Text c="dimmed" fw={700} size="xs">
+						Connections
+					</Text>
+					<ConnectionLegendItem label="HTTP call" variant="http" />
+					<ConnectionLegendItem label="Message call" variant="messaging" />
+					<ConnectionLegendItem label="Published event" variant="publication" />
+				</Stack>
+			</Group>
 		</Stack>
+	);
+}
+
+function ConnectionLegendItem({
+	label,
+	variant,
+}: {
+	label: string;
+	variant: "http" | "messaging" | "publication";
+}) {
+	return (
+		<Group gap={compactGap} wrap="nowrap">
+			<span
+				aria-hidden="true"
+				className={styles.lineSwatch}
+				data-variant={variant}
+			/>
+			<Text size="xs">{label}</Text>
+		</Group>
 	);
 }
 

@@ -1,9 +1,5 @@
-import type {
-	GetGraphResponse,
-	ModuleGraphEdge,
-	ModuleGraphNode,
-	ModuleProviderImpact,
-} from "@/api/model";
+import type { ModuleGraphEdge, ModuleProviderImpact } from "@/api/model";
+import type { GraphData, GraphModule } from "../types";
 
 // Reshapes the raw (per-instance) graph the backend returns into what the
 // canvas renders. When `groupDynamicModules` is on, instances of the same
@@ -12,9 +8,9 @@ import type {
 // dependency/dependent counts are recomputed. This used to live on the
 // backend — it moved here so toggling grouping never refetches.
 export function groupGraph(
-	graph: GetGraphResponse,
+	graph: GraphData,
 	groupDynamicModules: boolean,
-): GetGraphResponse {
+): GraphData {
 	const { modules, sourceToVisibleId } = groupDynamicModules
 		? groupModules(graph.modules)
 		: toInstanceGroups(graph.modules);
@@ -34,13 +30,13 @@ export function groupGraph(
 }
 
 type ShapedModules = {
-	modules: ModuleGraphNode[];
+	modules: GraphModule[];
 	// Maps each source instance id to the id of the node that represents it on
 	// screen (itself when ungrouped, the group id when grouped).
 	sourceToVisibleId: Map<string, string>;
 };
 
-function toInstanceGroups(modules: ModuleGraphNode[]): ShapedModules {
+function toInstanceGroups(modules: GraphModule[]): ShapedModules {
 	const familyCounts = getFamilyCounts(modules);
 
 	return {
@@ -55,8 +51,8 @@ function toInstanceGroups(modules: ModuleGraphNode[]): ShapedModules {
 	};
 }
 
-function groupModules(modules: ModuleGraphNode[]): ShapedModules {
-	const families = new Map<string, ModuleGraphNode[]>();
+function groupModules(modules: GraphModule[]): ShapedModules {
+	const families = new Map<string, GraphModule[]>();
 
 	for (const module of modules) {
 		const key = getModuleFamilyKey(module);
@@ -67,6 +63,7 @@ function groupModules(modules: ModuleGraphNode[]): ShapedModules {
 
 	const groupedModules = [...families.entries()].map(([key, instances]) => {
 		const [first] = instances;
+		const familyName = getModuleFamilyName(first);
 		const isGroup = instances.length > 1 || Boolean(first.dynamic);
 		const id = isGroup ? `group:${slugify(key)}` : first.id;
 
@@ -77,8 +74,8 @@ function groupModules(modules: ModuleGraphNode[]): ShapedModules {
 		return {
 			...first,
 			id,
-			name: key,
-			baseName: key,
+			name: familyName,
+			baseName: familyName,
 			dynamic:
 				instances.length === 1
 					? first.dynamic
@@ -164,6 +161,26 @@ function groupModules(modules: ModuleGraphNode[]): ShapedModules {
 				(entrypoint) =>
 					`${entrypoint.type}:${entrypoint.label}:${entrypoint.controller}:${entrypoint.handler}:${entrypoint.initializerKey}`,
 			),
+			ownOperationIds: uniqueStrings(
+				instances.map((module) => module.ownOperationIds),
+			),
+			calledOperations: uniqueBy(
+				instances.flatMap((module) => module.calledOperations),
+				(operation) => {
+					const operationKey =
+						operation.transport === "http"
+							? operation.operationId
+							: operation.type;
+					return `${operation.serviceName}:${operationKey}:${operation.transport}`;
+				},
+			),
+			publishedMessageTypes: uniqueStrings(
+				instances.map((module) => module.publishedMessageTypes),
+			),
+			subscribedMessages: uniqueBy(
+				instances.flatMap((module) => module.subscribedMessages),
+				(message) => `${message.serviceName}:${message.type}`,
+			),
 			// Union of instance impacts, so a grouped node correctly reports impact
 			// when any of its instances is impacted.
 			impact: mergeImpact(instances.map((module) => module.impact)),
@@ -207,11 +224,20 @@ function getEdgeCounts(edges: ModuleGraphEdge[]): {
 	return { dependencyCount, dependentCount };
 }
 
-function getModuleFamilyKey(module: ModuleGraphNode): string {
+function getModuleFamilyKey(module: GraphModule): string {
+	const serviceId = getModuleServiceId(module);
+	return `${serviceId}:${getModuleFamilyName(module)}`;
+}
+
+function getModuleFamilyName(module: GraphModule): string {
 	return module.baseName ?? module.name.replace(/_[a-f0-9]{4,}$/i, "");
 }
 
-function getFamilyCounts(modules: ModuleGraphNode[]): Map<string, number> {
+function getModuleServiceId(module: GraphModule): string {
+	return module.serviceName;
+}
+
+function getFamilyCounts(modules: GraphModule[]): Map<string, number> {
 	const counts = new Map<string, number>();
 
 	for (const module of modules) {
@@ -222,7 +248,7 @@ function getFamilyCounts(modules: ModuleGraphNode[]): Map<string, number> {
 	return counts;
 }
 
-function getGroupKind(instances: ModuleGraphNode[]): ModuleGraphNode["kind"] {
+function getGroupKind(instances: GraphModule[]): GraphModule["kind"] {
 	if (instances.some((instance) => instance.kind === "root")) return "root";
 	if (instances.every((instance) => instance.kind === "global"))
 		return "global";

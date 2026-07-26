@@ -9,11 +9,14 @@ import {
 	RoutePlaygroundModes,
 	type RoutePlaygroundViewMode,
 	RoutePlaygroundViewModes,
+	type TraceHistoryMode,
+	TraceHistoryModes,
 } from "./use-route-playground-settings";
 
 export type RoutePlaygroundSearch = {
 	entrypoint?: string;
 	handler?: string;
+	history?: TraceHistoryMode;
 	method?: string;
 	middleware?: string;
 	middlewares?: string;
@@ -25,6 +28,9 @@ export type RoutePlaygroundSearch = {
 	// see url-state.ts.
 	state?: string;
 	trace?: string;
+	// "full" selects the whole distributed trace (all service legs) rather than
+	// the single `trace` entry; absent means a single-entry selection.
+	traceScope?: "full";
 	view?: RoutePlaygroundViewMode;
 };
 
@@ -40,6 +46,7 @@ export function createRoutePlaygroundRoute<TParentRoute extends AnyRoute>(
 		): RoutePlaygroundSearch => ({
 			entrypoint: readStringSearch(search.entrypoint),
 			handler: readStringSearch(search.handler),
+			history: isTraceHistoryMode(search.history) ? search.history : undefined,
 			method: readStringSearch(search.method),
 			middleware: readStringSearch(search.middleware),
 			middlewares: readStringSearch(search.middlewares),
@@ -49,10 +56,17 @@ export function createRoutePlaygroundRoute<TParentRoute extends AnyRoute>(
 			route: readStringSearch(search.route),
 			state: readStringSearch(search.state),
 			trace: readStringSearch(search.trace),
+			traceScope: search.traceScope === "full" ? "full" : undefined,
 			view: isRoutePlaygroundViewMode(search.view) ? search.view : undefined,
 		}),
 		component,
 	});
+}
+
+function isTraceHistoryMode(value: unknown): value is TraceHistoryMode {
+	return (
+		value === TraceHistoryModes.merged || value === TraceHistoryModes.service
+	);
 }
 
 function isRoutePlaygroundViewMode(

@@ -1,0 +1,33 @@
+.overview {
+	position: absolute;
+	top: var(--mantine-spacing-xs);
+	right: var(--mantine-spacing-xs);
+	z-index: 4;
+	width: 220px;
+	pointer-events: auto;
+}
+
+.serviceButton {
+	flex: 1;
+	min-width: 0;
+	color: inherit;
+	text-align: left;
+}
+
+.serviceButton:disabled {
+	cursor: default;
+	opacity: 0.45;
+}
+
+.serviceRow {
+	min-height: 30px;
+	padding: 3px 6px;
+	border-radius: 4px;
+}
+
+.swatch {
+	width: 10px;
+	height: 10px;
+	border-radius: 2px;
+	flex: 0 0 auto;
+}

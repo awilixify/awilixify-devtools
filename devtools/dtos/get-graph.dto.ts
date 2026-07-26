@@ -18,6 +18,7 @@ export const ModuleGraphRouteSchema = Type.Object(
 		path: Type.String(),
 		controller: Type.String(),
 		handler: Type.String(),
+		operationId: Type.String(),
 		schema: Type.Optional(RouteSchemaSchema),
 	},
 	{ $id: "ModuleGraphRoute" },
@@ -33,6 +34,7 @@ export const ModuleGraphEntrypointSchema = Type.Object(
 		handler: Type.String(),
 		initializerKey: Type.String(),
 		decoratorName: Type.Optional(Type.String()),
+		decoratorArguments: Type.Optional(Type.String()),
 		metadata: Type.Optional(Type.Any()),
 	},
 	{ $id: "ModuleGraphEntrypoint" },
@@ -52,6 +54,37 @@ const ModuleGraphNodeKindSchema = Type.Union(
 	[Type.Literal("root"), Type.Literal("global"), Type.Literal("feature")],
 	{ $id: "ModuleGraphNodeKind" },
 );
+
+const ModuleGraphHttpOperationRefSchema = Type.Object({
+	serviceName: Type.String(),
+	operationId: Type.String(),
+	transport: Type.Literal("http"),
+});
+
+const ModuleGraphMessagingOperationRefSchema = Type.Object({
+	serviceName: Type.String(),
+	transport: Type.Literal("messaging"),
+	type: Type.String(),
+});
+
+export const ModuleGraphOperationRefSchema = Type.Union(
+	[ModuleGraphHttpOperationRefSchema, ModuleGraphMessagingOperationRefSchema],
+	{ $id: "ModuleGraphOperationRef" },
+);
+
+export type ModuleGraphOperationRef = Static<
+	typeof ModuleGraphOperationRefSchema
+>;
+
+export const ModuleGraphMessageRefSchema = Type.Object(
+	{
+		serviceName: Type.String(),
+		type: Type.String(),
+	},
+	{ $id: "ModuleGraphMessageRef" },
+);
+
+export type ModuleGraphMessageRef = Static<typeof ModuleGraphMessageRefSchema>;
 
 export const LifetimeTypeSchema = Type.Union(
 	[
@@ -132,6 +165,10 @@ const ModuleGraphNodeBaseSchema = Type.Object(
 		initializerExports: Type.Array(Type.String()),
 		initializerClassNames: Type.Record(Type.String(), Type.String()),
 		entrypoints: Type.Array(ModuleGraphEntrypointSchema),
+		ownOperationIds: Type.Array(Type.String()),
+		calledOperations: Type.Array(ModuleGraphOperationRefSchema),
+		publishedMessageTypes: Type.Array(Type.String()),
+		subscribedMessages: Type.Array(ModuleGraphMessageRefSchema),
 	},
 	{ $id: "ModuleGraphNodeBase" },
 );
@@ -200,6 +237,7 @@ export type ModuleGraphEdge = Static<typeof ModuleGraphEdgeSchema>;
 
 export const GetGraphResponseSchema = Type.Object(
 	{
+		serviceName: Type.String(),
 		globalProviderGroups: Type.Array(ModuleGraphGlobalProviderGroupSchema),
 		modules: Type.Array(ModuleGraphNodeSchema),
 		edges: Type.Array(ModuleGraphEdgeSchema),

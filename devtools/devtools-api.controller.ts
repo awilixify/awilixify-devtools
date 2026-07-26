@@ -38,8 +38,8 @@ export class DevtoolsApiController {
 
 	@GET("/traces")
 	@schema(GetTracesSchema)
-	getTraces() {
-		return this.queryMediator.execute("devtools/get-traces", {});
+	getTraces(request: Request<typeof GetTracesSchema>) {
+		return this.queryMediator.execute("devtools/get-traces", request.query);
 	}
 
 	@DELETE("/traces")

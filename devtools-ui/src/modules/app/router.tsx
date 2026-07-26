@@ -26,6 +26,7 @@ export type GraphRouteSearch = {
 export type RouterComponents = {
 	GraphView: RouteComponent;
 	RoutePlaygroundView: RouteComponent;
+	TargetsView: RouteComponent;
 };
 
 export function createAppRouter(components: RouterComponents) {
@@ -58,7 +59,17 @@ export function createAppRouter(components: RouterComponents) {
 		components.RoutePlaygroundView,
 	);
 
-	const routeTree = rootRoute.addChildren([graphRoute, routesRoute]);
+	const targetsRoute = createRoute({
+		getParentRoute: () => rootRoute,
+		path: "/targets",
+		component: components.TargetsView,
+	});
+
+	const routeTree = rootRoute.addChildren([
+		graphRoute,
+		routesRoute,
+		targetsRoute,
+	]);
 
 	return createRouter({
 		history: createHashHistory(),

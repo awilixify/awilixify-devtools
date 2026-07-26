@@ -15,16 +15,23 @@ export function MethodName({
 	methodName,
 	args,
 	fw,
+	truncate = false,
 }: {
 	methodName: string;
 	args: unknown[];
 	fw?: number;
+	truncate?: boolean;
 }) {
 	const hasArgs = args && args.length > 0;
 
 	if (!hasArgs) {
 		return (
-			<Text fw={fw} size="sm" style={{ minWidth: 0 }}>
+			<Text
+				fw={fw}
+				size="sm"
+				style={{ flex: truncate ? 1 : undefined, minWidth: 0 }}
+				truncate={truncate}
+			>
 				{methodName}
 				<Text span c="dimmed">
 					()
@@ -36,7 +43,16 @@ export function MethodName({
 	return (
 		<HoverCard shadow="md" position="bottom-start" withArrow>
 			<HoverCard.Target>
-				<Text fw={fw} size="sm" style={{ minWidth: 0, cursor: "help" }}>
+				<Text
+					fw={fw}
+					size="sm"
+					style={{
+						cursor: "help",
+						flex: truncate ? 1 : undefined,
+						minWidth: 0,
+					}}
+					truncate={truncate}
+				>
 					{methodName}
 					<Text span c="dimmed">
 						(...)

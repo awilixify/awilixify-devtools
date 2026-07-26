@@ -1,12 +1,27 @@
 import type { Edge, Node } from "@xyflow/react";
 import type { LifetimeType } from "awilix";
 import type {
+	GetGraphResponse,
 	ModuleGraphGlobalProviderGroup,
 	ModuleGraphNode,
 	ModuleProviderImpact,
 } from "@/api/model";
 
-export type ModuleNodeData = ModuleGraphNode & {
+export type GraphModule = ModuleGraphNode & {
+	serviceName: string;
+};
+
+export type GraphData = Omit<
+	Pick<
+		GetGraphResponse,
+		"availableDecorators" | "edges" | "globalProviderGroups" | "modules"
+	>,
+	"modules"
+> & {
+	modules: GraphModule[];
+};
+
+export type ModuleNodeData = GraphModule & {
 	// Registration key -> class name (class providers) / serialized value (value
 	// providers). Not in the generated ModuleGraphNode yet (pending generate:api).
 	providerClassNames: Record<string, string>;
@@ -19,10 +34,17 @@ export type ModuleNodeData = ModuleGraphNode & {
 	// own-providers group so local members and exports have visible anchors.
 	ownMembers: ModuleProviderGroupMember[];
 	isSelectedModule: boolean;
+	entrypointRelationByOperationKey: Record<string, EntrypointRelationStyle>;
 	lifetimeTypeByName: Record<string, LifetimeType>;
 	providerFocus: ProviderFocusState | null;
 	providerRelationColor?: string;
+	viewMode: GraphViewMode;
 	[key: string]: unknown;
+};
+
+export type EntrypointRelationStyle = {
+	borderStyle: "dashed" | "dotted" | "solid";
+	color: string;
 };
 
 export type ModuleFlowNode = Node<ModuleNodeData, "module">;
@@ -108,12 +130,32 @@ export type ModuleEdgeRole =
 	| "global"
 	| "default";
 
-export type ModuleFlowEdge = Edge<{
+type ModuleFlowEdgeData = {
 	color?: string;
-	type: "imports" | "global";
 	path?: string;
-	role: ModuleEdgeRole;
-}>;
+} & (
+	| {
+			kind: "module";
+			type: "imports" | "global";
+			role: ModuleEdgeRole;
+	  }
+	| {
+			kind: "operation";
+			operationKey: string;
+			relation: "call" | "publication";
+			transport: "http" | "messaging";
+	  }
+);
+
+export type ModuleFlowEdge = Edge<ModuleFlowEdgeData>;
+
+export type OperationConnection = {
+	from: string;
+	to: string;
+	operationKey: string;
+	relation: "call" | "publication";
+	transport: "http" | "messaging";
+};
 
 export type ProviderFocusInput = {
 	occurrenceId: string;

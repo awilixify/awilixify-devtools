@@ -1,11 +1,21 @@
 import type * as Awilix from "awilix";
 import type { LifetimeType } from "awilix";
 import {
+	OPERATION_CALL_DECORATOR_STATE_TOKEN,
+	OPERATION_PUBLISH_DECORATOR_STATE_TOKEN,
+	resolveDecoratorState,
+} from "awilixify";
+import {
 	hasUseClass,
 	type InternalModuleLike as M,
 	type ModuleDecoratorMetadata,
 } from "awilixify/devtools";
-import type { ModuleGraphEdge } from "../dtos/index.js";
+import type { Deps } from "../devtools.module.js";
+import type {
+	ModuleGraphEdge,
+	ModuleGraphEntrypoint,
+	ModuleGraphOperationRef,
+} from "../dtos/index.js";
 import { ModuleGraphProviderCollector } from "./provider-collector.js";
 import { ModuleGraphRouteCollector } from "./route-collector.js";
 import type { ModuleGraphInternal, ModuleGraphNodeInternal } from "./types.js";
@@ -19,6 +29,7 @@ export class ModuleGraphCollector {
 	private readonly providerCollector = new ModuleGraphProviderCollector();
 
 	private readonly routeCollector = new ModuleGraphRouteCollector({
+		getServiceName: () => this.options.serviceName,
 		getModuleNode: (moduleId) => this.modules.get(moduleId),
 		getOrCreateModule: (module) => this.getOrCreateModule(module),
 	});
@@ -30,6 +41,8 @@ export class ModuleGraphCollector {
 	private readonly moduleByGraphId = new Map<string, M>();
 
 	private globalModules: readonly M[] = [];
+
+	constructor(private readonly options: Deps["options"]) {}
 
 	initialize(rootModule: M, globalModules: readonly M[]): void {
 		this.rootModule = rootModule;
@@ -73,6 +86,27 @@ export class ModuleGraphCollector {
 		return this.moduleByGraphId.get(moduleId);
 	}
 
+	// Resolves a traced controller method back to the non-HTTP entrypoint that
+	// registered it (rabbit, cron, events, …). HTTP entrypoints are excluded:
+	// their trace method is the request verb, not an entrypoint kind.
+	findEntrypoint(
+		className: string,
+		methodName: string,
+	): ModuleGraphEntrypoint | undefined {
+		for (const node of this.modules.values()) {
+			const entrypoint = node.entrypoints.find(
+				(candidate) =>
+					candidate.type !== "http" &&
+					candidate.controller === className &&
+					candidate.handler === methodName,
+			);
+
+			if (entrypoint) return entrypoint;
+		}
+
+		return undefined;
+	}
+
 	getModuleScope(moduleId: string): Awilix.AwilixContainer | undefined {
 		return this.moduleScopeByGraphId.get(moduleId);
 	}
@@ -83,6 +117,7 @@ export class ModuleGraphCollector {
 
 	getModuleGraph(): ModuleGraph {
 		return {
+			serviceName: this.options.serviceName,
 			globalProviderGroups: [],
 			modules: [...this.modules.values()],
 			edges: [...this.edges.values()],
@@ -100,6 +135,78 @@ export class ModuleGraphCollector {
 		this.modules.set(id, this.createNode(id, module));
 
 		return id;
+	}
+
+	private getCalledOperations(module: M): ModuleGraphOperationRef[] {
+		const operationById = new Map<string, ModuleGraphOperationRef>();
+
+		for (const registration of Object.values(module.providers ?? {})) {
+			const providerClass = hasUseClass(registration)
+				? registration.useClass
+				: registration;
+
+			if (typeof providerClass !== "function") continue;
+
+			const state = resolveDecoratorState(
+				providerClass,
+				OPERATION_CALL_DECORATOR_STATE_TOKEN,
+			);
+			if (!state) continue;
+
+			for (const operationRefs of state.methods.values()) {
+				for (const operation of operationRefs) {
+					const operationKey =
+						operation.transport === "http"
+							? operation.operationId
+							: operation.type;
+					operationById.set(
+						`${operation.serviceName}:${operationKey}:${operation.transport}`,
+						operation,
+					);
+				}
+			}
+		}
+
+		return [...operationById.values()];
+	}
+
+	private getPublishedMessageTypes(module: M): string[] {
+		const messageTypes = new Set<string>();
+
+		for (const providerClass of this.getModuleClassTargets(module.providers)) {
+			const state = resolveDecoratorState(
+				providerClass,
+				OPERATION_PUBLISH_DECORATOR_STATE_TOKEN,
+			);
+			if (!state) continue;
+
+			for (const operations of state.methods.values()) {
+				for (const operation of operations) {
+					messageTypes.add(operation.type);
+				}
+			}
+		}
+
+		return [...messageTypes];
+	}
+
+	private getModuleClassTargets(
+		registrations:
+			| Readonly<Record<string, unknown>>
+			| readonly unknown[]
+			| undefined,
+	): unknown[] {
+		const values = Array.isArray(registrations)
+			? registrations
+			: Object.values(registrations ?? {});
+
+		return values.flatMap((registration) => {
+			const target = hasUseClass(registration)
+				? registration.useClass
+				: registration;
+
+			return typeof target === "function" ? [target] : [];
+		});
 	}
 
 	private addEdge(from: M, to: M, type: ModuleGraphEdge["type"]): void {
@@ -166,6 +273,10 @@ export class ModuleGraphCollector {
 			initializerClassNames: this.getFeatureClassNames(module.initializers),
 			entrypoints: [],
 			routes: [],
+			ownOperationIds: [],
+			calledOperations: this.getCalledOperations(module),
+			publishedMessageTypes: this.getPublishedMessageTypes(module),
+			subscribedMessages: [],
 			impact: {
 				added: [],
 				affected: [],
@@ -332,7 +443,7 @@ export class ModuleGraphCollector {
 	}
 
 	private createModuleId(module: M): string {
-		const baseId = this.slugify(module.name);
+		const baseId = `${this.options.serviceName}--${this.slugify(module.name)}`;
 		let id = baseId;
 		let index = 2;
 

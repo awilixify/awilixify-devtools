@@ -47,3 +47,50 @@
 	width: var(--mantine-spacing-sm);
 	height: var(--mantine-spacing-sm);
 }
+
+.lineSwatch {
+	--connection-color: var(--graph-color-muted);
+
+	width: 28px;
+	height: 3px;
+	flex: 0 0 28px;
+	position: relative;
+	background: var(--connection-color);
+}
+
+.lineSwatch::after {
+	content: "";
+	position: absolute;
+	top: 50%;
+	right: -4px;
+	width: 0;
+	height: 0;
+	border-top: 4px solid transparent;
+	border-bottom: 4px solid transparent;
+	border-left: 5px solid var(--connection-color);
+	transform: translateY(-50%);
+}
+
+.lineSwatch[data-variant="http"] {
+	--connection-color: var(--graph-color-http-call);
+}
+
+.lineSwatch[data-variant="messaging"] {
+	--connection-color: var(--graph-color-message-call);
+
+	background: repeating-linear-gradient(
+		to right,
+		var(--connection-color) 0 2px,
+		transparent 2px 7px
+	);
+}
+
+.lineSwatch[data-variant="publication"] {
+	--connection-color: var(--graph-color-async);
+
+	background: repeating-linear-gradient(
+		to right,
+		var(--connection-color) 0 10px,
+		transparent 10px 16px
+	);
+}

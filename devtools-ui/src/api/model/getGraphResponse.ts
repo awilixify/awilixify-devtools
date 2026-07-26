@@ -11,6 +11,7 @@ import type { ModuleGraphGlobalProviderGroup } from "./moduleGraphGlobalProvider
 import type { ModuleGraphNode } from "./moduleGraphNode";
 
 export interface GetGraphResponse {
+	serviceName: string;
 	globalProviderGroups: ModuleGraphGlobalProviderGroup[];
 	modules: ModuleGraphNode[];
 	edges: ModuleGraphEdge[];

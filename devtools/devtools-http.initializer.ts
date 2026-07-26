@@ -39,14 +39,20 @@ export class DevtoolsHttpInitializer extends Initializer<HttpToken> {
 					handler: (request, reply) =>
 						this.handleRequest(context, request, reply),
 					preHandler: methodState.beforeMiddleware,
-					schema: this.buildRouteSchema(methodState.schema),
+					schema: this.buildRouteSchema(
+						methodState.schema,
+						String(context.methodName),
+					),
 				});
 			}
 		}
 	}
 
-	private buildRouteSchema(schema: RouteSchema): RouteSchema {
-		const result: RouteSchema = { ...schema };
+	private buildRouteSchema(
+		schema: RouteSchema,
+		operationId: string,
+	): RouteSchema & { operationId: string } {
+		const result = { ...schema, operationId };
 
 		// Register and replace params with $ref
 		if (this.hasSchemaId(schema.params)) {

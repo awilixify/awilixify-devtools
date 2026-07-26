@@ -16,6 +16,7 @@ import type {
 } from "./types.js";
 
 type ModuleGraphRouteCollectorOptions = {
+	getServiceName(): string;
 	getOrCreateModule(module: M): string;
 	getModuleNode(moduleId: string): ModuleGraphNode | undefined;
 };
@@ -52,6 +53,7 @@ export class ModuleGraphRouteCollector {
 						decoratorState.decoratorNames.get(methodName) ?? initializerKey;
 
 					if (!isHttpEntrypoint) {
+						this.collectMessageSubscription(module, metadata);
 						this.addEntrypoint(module, {
 							type: entrypointType,
 							label: this.formatEntrypointLabel(entrypointType, metadata),
@@ -76,6 +78,7 @@ export class ModuleGraphRouteCollector {
 								path,
 								controller: controller.name,
 								handler: String(methodName),
+								operationId: String(methodName),
 								schema: this.getRequestSchema(httpState.schema),
 							});
 							this.addEntrypoint(module, {
@@ -98,6 +101,30 @@ export class ModuleGraphRouteCollector {
 		}
 	}
 
+	private collectMessageSubscription(module: M, metadata: unknown): void {
+		const message = getMessageRef(metadata);
+		if (!message) return;
+
+		const normalized = {
+			serviceName: message.serviceName ?? this.options.getServiceName(),
+			type: message.type,
+		};
+		const id = this.options.getOrCreateModule(module);
+		const node = this.options.getModuleNode(id);
+		if (!node) return;
+
+		const key = `${normalized.serviceName}:${normalized.type}`;
+		if (
+			node.subscribedMessages.some(
+				(existing) => `${existing.serviceName}:${existing.type}` === key,
+			)
+		) {
+			return;
+		}
+
+		node.subscribedMessages.push(normalized);
+	}
+
 	private addRoute(module: M, route: ModuleGraphRoute): void {
 		const id = this.options.getOrCreateModule(module);
 		const node = this.options.getModuleNode(id);
@@ -112,6 +139,9 @@ export class ModuleGraphRouteCollector {
 		}
 
 		node.routes.push(route);
+		if (!node.ownOperationIds.includes(route.operationId)) {
+			node.ownOperationIds.push(route.operationId);
+		}
 	}
 
 	private addEntrypoint(module: M, entrypoint: ModuleGraphEntrypoint): void {
@@ -200,6 +230,26 @@ export class ModuleGraphRouteCollector {
 
 		return Object.keys(requestSchema).length > 0 ? requestSchema : undefined;
 	}
+}
+
+function getMessageRef(
+	metadata: unknown,
+): { serviceName?: string; type: string } | null {
+	if (!metadata || typeof metadata !== "object") return null;
+
+	const message = (metadata as { message?: unknown }).message;
+	if (!message || typeof message !== "object") return null;
+
+	const candidate = message as { serviceName?: unknown; type?: unknown };
+	if (
+		typeof candidate.type !== "string" ||
+		(candidate.serviceName !== undefined &&
+			typeof candidate.serviceName !== "string")
+	) {
+		return null;
+	}
+
+	return candidate as { serviceName?: string; type: string };
 }
 
 function getEntrypointType(description: string | undefined): string {

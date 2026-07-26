@@ -42,21 +42,84 @@ const HTTP_DECORATOR_NAMES: readonly string[] = [
 // isn't available (e.g. a built deployment), degrading gracefully.
 export class DecoratorScanner {
 	private cache: Record<string, string[]> | null = null;
+	private argumentsCache: Record<string, string> | null = null;
+	// `undefined` = not built yet, `null` = build failed (no source/tsconfig).
+	private project: Project | null | undefined;
 	private readonly cwd = path.resolve(process.cwd());
 
 	getDecoratorNamesByClassName(): Record<string, string[]> {
 		if (this.cache) return this.cache;
 
 		try {
-			const project = new Project({
-				tsConfigFilePath: path.resolve(this.cwd, "tsconfig.json"),
-			});
-			this.cache = this.scan(project);
+			const project = this.getProject();
+			this.cache = project ? this.scan(project) : {};
 		} catch {
 			this.cache = {};
 		}
 
 		return this.cache;
+	}
+
+	// Raw source text of each applied decorator's call arguments, keyed by
+	// `${className}.${methodName}.${decoratorName}`. Lets the graph show a
+	// decorator the way it reads in code — e.g. the message-contract identifier
+	// `@onRabbitMessage(ReservationCreatedEvent, { queueName: "…" })` — which the
+	// runtime metadata (a resolved object) can't recover. Empty when source isn't
+	// available (e.g. a built deployment), degrading gracefully.
+	getDecoratorArgumentsByKey(): Record<string, string> {
+		if (this.argumentsCache) return this.argumentsCache;
+
+		try {
+			const project = this.getProject();
+			this.argumentsCache = project ? this.scanDecoratorArguments(project) : {};
+		} catch {
+			this.argumentsCache = {};
+		}
+
+		return this.argumentsCache;
+	}
+
+	// Building the ts-morph project is expensive, so do it once and share it
+	// across both scans.
+	private getProject(): Project | null {
+		if (this.project !== undefined) return this.project;
+
+		try {
+			this.project = new Project({
+				tsConfigFilePath: path.resolve(this.cwd, "tsconfig.json"),
+			});
+		} catch {
+			this.project = null;
+		}
+
+		return this.project;
+	}
+
+	private scanDecoratorArguments(project: Project): Record<string, string> {
+		const result: Record<string, string> = {};
+
+		for (const sourceFile of project.getSourceFiles()) {
+			for (const classDeclaration of sourceFile.getClasses()) {
+				const className = classDeclaration.getName();
+				if (!className) continue;
+
+				for (const method of classDeclaration.getMethods()) {
+					const methodName = method.getName();
+
+					for (const decorator of method.getDecorators()) {
+						if (!decorator.isDecoratorFactory()) continue;
+
+						const args = decorator.getArguments().map((arg) => arg.getText());
+						if (args.length === 0) continue;
+
+						result[`${className}.${methodName}.${decorator.getName()}`] =
+							args.join(", ");
+					}
+				}
+			}
+		}
+
+		return result;
 	}
 
 	private scan(project: Project): Record<string, string[]> {

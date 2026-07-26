@@ -12,8 +12,10 @@ import { Handle, Position } from "@xyflow/react";
 import { Fragment } from "react";
 import type { RoutePlaygroundSearch } from "../../../route-playground/route";
 import { RoutePlaygroundModes } from "../../../route-playground/use-route-playground-settings";
+import { useTargets } from "../../../targets/TargetsContext";
 import { useGraphSettings } from "../../GraphSettingsContext";
 import { PROVIDER_ROW_HEIGHT } from "../../hooks/provider-node-metrics";
+import { getInvocationModuleId } from "../../module-id";
 import type { ModuleFlowNode } from "../../types";
 import { HighlightedText } from "./HighlightedText";
 import styles from "./ModuleNode.module.css";
@@ -26,7 +28,7 @@ export function ProviderGroup({
 	groupKey,
 	highlightExports = true,
 	onProviderClick,
-	providerPlaygroundModuleId = data.id,
+	providerPlaygroundModuleId = getInvocationModuleId(data),
 	showHandles = true,
 	showMembers = showHandles,
 	showGroupColor = true,
@@ -49,6 +51,7 @@ export function ProviderGroup({
 	width?: number | string;
 }) {
 	const navigate = useNavigate({ from: "/" });
+	const { selectTarget } = useTargets();
 	const { providerFocusHighlight, searchQuery } = useGraphSettings();
 	const isOwnGroup = group === undefined;
 	// providerRelationColor belongs to the OWN group only. Imported groups use just
@@ -250,6 +253,7 @@ export function ProviderGroup({
 						const openMiddlewareInPlayground = () => {
 							if (!opensMiddlewarePlayground) return;
 
+							selectTarget(data.serviceName);
 							navigate({
 								to: "/routes",
 								search: {

@@ -1,12 +1,14 @@
 import fastifyCors from "@fastify/cors";
 import fastifySwagger from "@fastify/swagger";
 import fastifySwaggerUi from "@fastify/swagger-ui";
+import { DEVTOOLS_API_PATH } from "./devtools.constants.js";
 import type { Deps } from "./devtools.module.js";
 
 export class DevtoolsServer {
 	constructor(
 		private readonly fastify: Deps["fastify"],
 		private readonly options: Deps["options"],
+		private readonly tracer: Deps["tracer"],
 	) {}
 
 	async init(): Promise<void> {
@@ -14,10 +16,48 @@ export class DevtoolsServer {
 			methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
 		});
 		await this.registerSwagger();
+		this.registerTraceStream();
 
 		this.fastify.setSerializerCompiler(() => {
 			return (data) => JSON.stringify(data);
 		});
+	}
+
+	// Server-Sent Events stream of finished traces so the UI receives new (and
+	// async downstream) traces the moment they are recorded, without polling.
+	private registerTraceStream(): void {
+		this.fastify.get(
+			`${DEVTOOLS_API_PATH}/traces/stream`,
+			(_request, reply) => {
+				// Take over the socket; Fastify will not serialize/close the reply.
+				reply.hijack();
+				const raw = reply.raw;
+
+				raw.writeHead(200, {
+					"Content-Type": "text/event-stream",
+					"Cache-Control": "no-cache, no-transform",
+					Connection: "keep-alive",
+					// Ask intermediaries (e.g. nginx) not to buffer the stream.
+					"X-Accel-Buffering": "no",
+				});
+				// Tell EventSource how long to wait before reconnecting.
+				raw.write("retry: 3000\n\n");
+
+				const unsubscribe = this.tracer.subscribe((trace) => {
+					raw.write(`data: ${JSON.stringify(trace)}\n\n`);
+				});
+				// Comment lines keep the connection alive through idle proxies.
+				const heartbeat = setInterval(() => {
+					raw.write(": ping\n\n");
+				}, 15_000);
+
+				const close = () => {
+					clearInterval(heartbeat);
+					unsubscribe();
+				};
+				raw.on("close", close);
+			},
+		);
 	}
 
 	private async registerSwagger(): Promise<void> {

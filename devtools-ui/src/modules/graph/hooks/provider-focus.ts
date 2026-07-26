@@ -1,4 +1,5 @@
-import type { GetGraphResponse, ModuleGraphNode } from "@/api/model";
+import type { ModuleGraphNode } from "@/api/model";
+import type { GraphData } from "../types";
 import type { ProviderFocusInput, ProviderFocusState } from "../types";
 
 export function getProviderFocusState(
@@ -62,10 +63,10 @@ export function filterProviderFocusGraph({
 	providerFocus,
 	relatedOnly,
 }: {
-	graph: GetGraphResponse;
+	graph: GraphData;
 	providerFocus: ProviderFocusInput | null;
 	relatedOnly: boolean | undefined;
-}): GetGraphResponse {
+}): GraphData {
 	const providerFocusModuleIds = relatedOnly
 		? getProviderFocusModuleIds(graph.modules, providerFocus)
 		: null;

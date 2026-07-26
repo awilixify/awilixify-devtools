@@ -74,6 +74,19 @@ export const TraceRequestSchema = Type.Object(
 
 export type TraceRequest = Static<typeof TraceRequestSchema>;
 
+// Present on root traces that entered through a non-HTTP entrypoint (rabbit,
+// cron, events, …). `type` is the entrypoint kind and `label` is the listener
+// name (queue/routing key), both sourced from the entrypoint's decorator.
+export const TraceEntrypointSchema = Type.Object(
+	{
+		type: Type.String(),
+		label: Type.String(),
+	},
+	{ $id: "TraceEntrypoint" },
+);
+
+export type TraceEntrypoint = Static<typeof TraceEntrypointSchema>;
+
 export const TraceSpanSchema = Type.Object(
 	{
 		id: Type.String(),
@@ -103,7 +116,12 @@ export type TraceSpan = Static<typeof TraceSpanSchema>;
 export const TraceSchema = Type.Object(
 	{
 		id: Type.String(),
+		distributedTraceId: Type.String(),
+		spanId: Type.String(),
+		parentSpanId: Type.Union([Type.String(), Type.Null()]),
+		serviceName: Type.String(),
 		method: Type.String(),
+		entrypoint: Type.Optional(TraceEntrypointSchema),
 		path: Type.String(),
 		url: Type.String(),
 		statusCode: Type.Union([Type.Number(), Type.Null()]),

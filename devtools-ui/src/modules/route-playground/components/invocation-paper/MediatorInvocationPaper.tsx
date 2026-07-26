@@ -5,6 +5,7 @@ import { useGetDevtoolsGraphSuspense } from "@/api/graph/graph";
 import type { GetGraphResponse } from "@/api/model";
 import { usePostDevtoolsPlaygroundInvokeHandler } from "@/api/playground/playground";
 import { useGetDevtoolsTraces } from "@/api/traces/traces";
+import { useRefreshEntryTraces } from "../../entry-traces";
 import type { RoutePlaygroundSearch } from "../../route";
 import {
 	formatStateField,
@@ -42,6 +43,7 @@ export function MediatorInvocationPaper() {
 	const { setSelectedTraceId, setViewMode } = useRoutePlaygroundSettings();
 	const { data: graph } = useGetDevtoolsGraphSuspense();
 	const { refetch: refetchTraces } = useGetDevtoolsTraces();
+	const refreshEntryTraces = useRefreshEntryTraces();
 
 	const selectedModuleId = routeSearch.module ?? null;
 	const selectedHandlerKey = routeSearch.handler ?? null;
@@ -169,7 +171,8 @@ export function MediatorInvocationPaper() {
 		mutation: {
 			onSuccess: async (response) => {
 				await refetchTraces();
-				setSelectedTraceId(response.traceId);
+				await refreshEntryTraces();
+				setSelectedTraceId(response.traceId, "full");
 				setViewMode(RoutePlaygroundViewModes.trace);
 			},
 		},

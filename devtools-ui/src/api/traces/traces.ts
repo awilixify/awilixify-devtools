@@ -23,13 +23,15 @@ import type {
 	UseSuspenseQueryResult,
 } from "@tanstack/react-query";
 import { useMutation, useQuery, useSuspenseQuery } from "@tanstack/react-query";
-
+import { devtoolsFetch } from "../../devtools-fetch";
 import type {
 	ClearTracesResponse,
 	DeleteTraceResponse,
 	GetTraceResponse,
 	GetTracesResponse,
 } from "../model";
+
+type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
 const withQueryKey = <T extends object, K>(
 	query: T,
@@ -60,15 +62,10 @@ export const getGetDevtoolsTracesUrl = () => {
 export const getDevtoolsTraces = async (
 	options?: RequestInit,
 ): Promise<GetTracesResponse> => {
-	const res = await fetch(getGetDevtoolsTracesUrl(), {
+	return devtoolsFetch<GetTracesResponse>(getGetDevtoolsTracesUrl(), {
 		...options,
 		method: "GET",
 	});
-
-	const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-	const data: GetTracesResponse = body ? JSON.parse(body) : {};
-	return data;
 };
 
 export const getGetDevtoolsTracesQueryKey = () => {
@@ -86,15 +83,15 @@ export const getGetDevtoolsTracesQueryOptions = <
 			TData
 		>
 	>;
-	fetch?: RequestInit;
+	request?: SecondParameter<typeof devtoolsFetch>;
 }) => {
-	const { query: queryOptions, fetch: fetchOptions } = options ?? {};
+	const { query: queryOptions, request: requestOptions } = options ?? {};
 
 	const queryKey = queryOptions?.queryKey ?? getGetDevtoolsTracesQueryKey();
 
 	const queryFn: QueryFunction<
 		Awaited<ReturnType<typeof getDevtoolsTraces>>
-	> = ({ signal }) => getDevtoolsTraces({ signal, ...fetchOptions });
+	> = ({ signal }) => getDevtoolsTraces({ signal, ...requestOptions });
 
 	return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
 		Awaited<ReturnType<typeof getDevtoolsTraces>>,
@@ -128,7 +125,7 @@ export function useGetDevtoolsTraces<
 				>,
 				"initialData"
 			>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): DefinedUseQueryResult<TData, TError> & {
@@ -154,7 +151,7 @@ export function useGetDevtoolsTraces<
 				>,
 				"initialData"
 			>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & {
@@ -172,7 +169,7 @@ export function useGetDevtoolsTraces<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & {
@@ -194,7 +191,7 @@ export function useGetDevtoolsTraces<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & {
@@ -221,15 +218,15 @@ export const getGetDevtoolsTracesSuspenseQueryOptions = <
 			TData
 		>
 	>;
-	fetch?: RequestInit;
+	request?: SecondParameter<typeof devtoolsFetch>;
 }) => {
-	const { query: queryOptions, fetch: fetchOptions } = options ?? {};
+	const { query: queryOptions, request: requestOptions } = options ?? {};
 
 	const queryKey = queryOptions?.queryKey ?? getGetDevtoolsTracesQueryKey();
 
 	const queryFn: QueryFunction<
 		Awaited<ReturnType<typeof getDevtoolsTraces>>
-	> = ({ signal }) => getDevtoolsTraces({ signal, ...fetchOptions });
+	> = ({ signal }) => getDevtoolsTraces({ signal, ...requestOptions });
 
 	return { queryKey, queryFn, ...queryOptions } as UseSuspenseQueryOptions<
 		Awaited<ReturnType<typeof getDevtoolsTraces>>,
@@ -255,7 +252,7 @@ export function useGetDevtoolsTracesSuspense<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseSuspenseQueryResult<TData, TError> & {
@@ -273,7 +270,7 @@ export function useGetDevtoolsTracesSuspense<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseSuspenseQueryResult<TData, TError> & {
@@ -291,7 +288,7 @@ export function useGetDevtoolsTracesSuspense<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseSuspenseQueryResult<TData, TError> & {
@@ -313,7 +310,7 @@ export function useGetDevtoolsTracesSuspense<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseSuspenseQueryResult<TData, TError> & {
@@ -342,15 +339,10 @@ export const getDeleteDevtoolsTracesUrl = () => {
 export const deleteDevtoolsTraces = async (
 	options?: RequestInit,
 ): Promise<ClearTracesResponse> => {
-	const res = await fetch(getDeleteDevtoolsTracesUrl(), {
+	return devtoolsFetch<ClearTracesResponse>(getDeleteDevtoolsTracesUrl(), {
 		...options,
 		method: "DELETE",
 	});
-
-	const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-	const data: ClearTracesResponse = body ? JSON.parse(body) : {};
-	return data;
 };
 
 export const getDeleteDevtoolsTracesMutationOptions = <
@@ -363,7 +355,7 @@ export const getDeleteDevtoolsTracesMutationOptions = <
 		void,
 		TContext
 	>;
-	fetch?: RequestInit;
+	request?: SecondParameter<typeof devtoolsFetch>;
 }): UseMutationOptions<
 	Awaited<ReturnType<typeof deleteDevtoolsTraces>>,
 	TError,
@@ -371,19 +363,19 @@ export const getDeleteDevtoolsTracesMutationOptions = <
 	TContext
 > => {
 	const mutationKey = ["deleteDevtoolsTraces"];
-	const { mutation: mutationOptions, fetch: fetchOptions } = options
+	const { mutation: mutationOptions, request: requestOptions } = options
 		? options.mutation &&
 			"mutationKey" in options.mutation &&
 			options.mutation.mutationKey
 			? options
 			: { ...options, mutation: { ...options.mutation, mutationKey } }
-		: { mutation: { mutationKey }, fetch: undefined };
+		: { mutation: { mutationKey }, request: undefined };
 
 	const mutationFn: MutationFunction<
 		Awaited<ReturnType<typeof deleteDevtoolsTraces>>,
 		void
 	> = () => {
-		return deleteDevtoolsTraces(fetchOptions);
+		return deleteDevtoolsTraces(requestOptions);
 	};
 
 	return { mutationFn, ...mutationOptions };
@@ -406,7 +398,7 @@ export const useDeleteDevtoolsTraces = <TError = unknown, TContext = unknown>(
 			void,
 			TContext
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseMutationResult<
@@ -432,15 +424,13 @@ export const getDevtoolsTracesTraceId = async (
 	traceId: string,
 	options?: RequestInit,
 ): Promise<GetTraceResponse> => {
-	const res = await fetch(getGetDevtoolsTracesTraceIdUrl(traceId), {
-		...options,
-		method: "GET",
-	});
-
-	const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-	const data: GetTraceResponse = body ? JSON.parse(body) : {};
-	return data;
+	return devtoolsFetch<GetTraceResponse>(
+		getGetDevtoolsTracesTraceIdUrl(traceId),
+		{
+			...options,
+			method: "GET",
+		},
+	);
 };
 
 export const getGetDevtoolsTracesTraceIdQueryKey = (traceId: string) => {
@@ -460,10 +450,10 @@ export const getGetDevtoolsTracesTraceIdQueryOptions = <
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 ) => {
-	const { query: queryOptions, fetch: fetchOptions } = options ?? {};
+	const { query: queryOptions, request: requestOptions } = options ?? {};
 
 	const queryKey =
 		queryOptions?.queryKey ?? getGetDevtoolsTracesTraceIdQueryKey(traceId);
@@ -471,7 +461,7 @@ export const getGetDevtoolsTracesTraceIdQueryOptions = <
 	const queryFn: QueryFunction<
 		Awaited<ReturnType<typeof getDevtoolsTracesTraceId>>
 	> = ({ signal }) =>
-		getDevtoolsTracesTraceId(traceId, { signal, ...fetchOptions });
+		getDevtoolsTracesTraceId(traceId, { signal, ...requestOptions });
 
 	return {
 		queryKey,
@@ -511,7 +501,7 @@ export function useGetDevtoolsTracesTraceId<
 				>,
 				"initialData"
 			>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): DefinedUseQueryResult<TData, TError> & {
@@ -538,7 +528,7 @@ export function useGetDevtoolsTracesTraceId<
 				>,
 				"initialData"
 			>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & {
@@ -557,7 +547,7 @@ export function useGetDevtoolsTracesTraceId<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & {
@@ -580,7 +570,7 @@ export function useGetDevtoolsTracesTraceId<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & {
@@ -612,10 +602,10 @@ export const getGetDevtoolsTracesTraceIdSuspenseQueryOptions = <
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 ) => {
-	const { query: queryOptions, fetch: fetchOptions } = options ?? {};
+	const { query: queryOptions, request: requestOptions } = options ?? {};
 
 	const queryKey =
 		queryOptions?.queryKey ?? getGetDevtoolsTracesTraceIdQueryKey(traceId);
@@ -623,7 +613,7 @@ export const getGetDevtoolsTracesTraceIdSuspenseQueryOptions = <
 	const queryFn: QueryFunction<
 		Awaited<ReturnType<typeof getDevtoolsTracesTraceId>>
 	> = ({ signal }) =>
-		getDevtoolsTracesTraceId(traceId, { signal, ...fetchOptions });
+		getDevtoolsTracesTraceId(traceId, { signal, ...requestOptions });
 
 	return { queryKey, queryFn, ...queryOptions } as UseSuspenseQueryOptions<
 		Awaited<ReturnType<typeof getDevtoolsTracesTraceId>>,
@@ -650,7 +640,7 @@ export function useGetDevtoolsTracesTraceIdSuspense<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseSuspenseQueryResult<TData, TError> & {
@@ -669,7 +659,7 @@ export function useGetDevtoolsTracesTraceIdSuspense<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseSuspenseQueryResult<TData, TError> & {
@@ -688,7 +678,7 @@ export function useGetDevtoolsTracesTraceIdSuspense<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseSuspenseQueryResult<TData, TError> & {
@@ -711,7 +701,7 @@ export function useGetDevtoolsTracesTraceIdSuspense<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseSuspenseQueryResult<TData, TError> & {
@@ -744,15 +734,13 @@ export const deleteDevtoolsTracesTraceId = async (
 	traceId: string,
 	options?: RequestInit,
 ): Promise<DeleteTraceResponse> => {
-	const res = await fetch(getDeleteDevtoolsTracesTraceIdUrl(traceId), {
-		...options,
-		method: "DELETE",
-	});
-
-	const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-	const data: DeleteTraceResponse = body ? JSON.parse(body) : {};
-	return data;
+	return devtoolsFetch<DeleteTraceResponse>(
+		getDeleteDevtoolsTracesTraceIdUrl(traceId),
+		{
+			...options,
+			method: "DELETE",
+		},
+	);
 };
 
 export const getDeleteDevtoolsTracesTraceIdMutationOptions = <
@@ -765,7 +753,7 @@ export const getDeleteDevtoolsTracesTraceIdMutationOptions = <
 		{ traceId: string },
 		TContext
 	>;
-	fetch?: RequestInit;
+	request?: SecondParameter<typeof devtoolsFetch>;
 }): UseMutationOptions<
 	Awaited<ReturnType<typeof deleteDevtoolsTracesTraceId>>,
 	TError,
@@ -773,13 +761,13 @@ export const getDeleteDevtoolsTracesTraceIdMutationOptions = <
 	TContext
 > => {
 	const mutationKey = ["deleteDevtoolsTracesTraceId"];
-	const { mutation: mutationOptions, fetch: fetchOptions } = options
+	const { mutation: mutationOptions, request: requestOptions } = options
 		? options.mutation &&
 			"mutationKey" in options.mutation &&
 			options.mutation.mutationKey
 			? options
 			: { ...options, mutation: { ...options.mutation, mutationKey } }
-		: { mutation: { mutationKey }, fetch: undefined };
+		: { mutation: { mutationKey }, request: undefined };
 
 	const mutationFn: MutationFunction<
 		Awaited<ReturnType<typeof deleteDevtoolsTracesTraceId>>,
@@ -787,7 +775,7 @@ export const getDeleteDevtoolsTracesTraceIdMutationOptions = <
 	> = (props) => {
 		const { traceId } = props ?? {};
 
-		return deleteDevtoolsTracesTraceId(traceId, fetchOptions);
+		return deleteDevtoolsTracesTraceId(traceId, requestOptions);
 	};
 
 	return { mutationFn, ...mutationOptions };
@@ -813,7 +801,7 @@ export const useDeleteDevtoolsTracesTraceId = <
 			{ traceId: string },
 			TContext
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseMutationResult<

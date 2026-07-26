@@ -1,5 +1,6 @@
 import {
 	ActionIcon,
+	Alert,
 	Divider,
 	Group,
 	LoadingOverlay,
@@ -14,6 +15,8 @@ import {
 	type EdgeProps,
 	getSmoothStepPath,
 	MiniMap,
+	MiniMapNode,
+	type MiniMapNodeProps,
 	ReactFlow,
 	ViewportPortal,
 } from "@xyflow/react";
@@ -21,11 +24,17 @@ import { useMemo, useState } from "react";
 import { useGraphSettings } from "../GraphSettingsContext";
 import { matchesSearch } from "../graph-search";
 import { useGraphFlow } from "../hooks/use-graph-flow";
+import {
+	getServiceBackgroundColor,
+	getServiceBorderColor,
+	getServiceColor,
+} from "../service-colors";
 import type { ModuleFlowEdge, ModuleFlowNode } from "../types";
 import { GraphLegend } from "./GraphLegend";
 import legendStyles from "./GraphLegend.module.css";
 import { GraphSettings } from "./GraphSettings";
 import { ModuleNode } from "./ModuleNode/ModuleNode";
+import { OverviewedApps } from "./OverviewedApps";
 
 const LEGEND_OPEN_STORAGE_KEY = "awilixify-devtools:graph:legend-open";
 
@@ -37,8 +46,18 @@ export function GraphCanvas() {
 		setProviderFocus,
 		setSelectedModuleId,
 	} = useGraphSettings();
-	const { edges, flowRef, nodes, onEdgesChange, onNodesChange, loading } =
-		useGraphFlow();
+	const {
+		edges,
+		error,
+		flowRef,
+		nodes,
+		onEdgesChange,
+		onNodesChange,
+		loading,
+		serviceNames,
+		setServiceVisible,
+		visibleServiceNames,
+	} = useGraphFlow();
 	const [legendOpen, setLegendOpen] = useState(readStoredLegendOpen);
 	const minimapSelectedModuleId =
 		selectedModuleId ?? getProviderFocusModuleId(providerFocus);
@@ -53,10 +72,48 @@ export function GraphCanvas() {
 		() => (loading ? undefined : getTranslateExtent(nodes)),
 		[loading, nodes],
 	);
-	const globalBandBounds = useMemo(
-		() => (loading ? null : getGlobalModulesBounds(nodes)),
-		[loading, nodes],
+	const serviceBounds = useMemo(
+		() => (loading ? [] : getServiceBounds(nodes, edges)),
+		[edges, loading, nodes],
 	);
+	const overviewedApps = useMemo(
+		() =>
+			serviceNames.map((serviceName) => ({
+				background: getServiceBackgroundColor(serviceName),
+				color: getServiceColor(serviceName),
+				name: serviceName,
+				visible: visibleServiceNames.has(serviceName),
+			})),
+		[serviceNames, visibleServiceNames],
+	);
+	const minimapNodeComponent = useMemo(() => {
+		const serviceByAnchorNodeId = new Map(
+			serviceBounds.map((service) => [service.anchorNodeId, service]),
+		);
+
+		return function ServiceMiniMapNode(props: MiniMapNodeProps) {
+			const service = serviceByAnchorNodeId.get(props.id);
+
+			return (
+				<>
+					{service && (
+						<rect
+							fill={service.background}
+							height={service.height}
+							pointerEvents="none"
+							rx={8}
+							stroke={service.color}
+							strokeWidth={5}
+							width={service.width}
+							x={service.x}
+							y={service.y}
+						/>
+					)}
+					<MiniMapNode {...props} />
+				</>
+			);
+		};
+	}, [serviceBounds]);
 
 	return (
 		<Paper radius="md" p={0} className="graph-panel">
@@ -105,6 +162,26 @@ export function GraphCanvas() {
 				</Paper>
 			</div>
 
+			<OverviewedApps
+				apps={overviewedApps}
+				onCenter={(serviceName) => {
+					const service = serviceBounds.find(
+						(candidate) => candidate.id === serviceName,
+					);
+					if (!service || !flowRef.current) return;
+
+					flowRef.current.setCenter(
+						service.x + service.width / 2,
+						service.y + service.height / 2,
+						{
+							duration: 400,
+							zoom: flowRef.current.getZoom(),
+						},
+					);
+				}}
+				onVisibilityChange={setServiceVisible}
+			/>
+
 			<ReactFlow
 				nodes={loading ? [] : nodes}
 				edges={loading ? [] : edges}
@@ -136,20 +213,30 @@ export function GraphCanvas() {
 					}
 					setSelectedModuleId(null);
 				}}
-				minZoom={0.25}
+				minZoom={0.2}
 				maxZoom={0.7}
 				nodesDraggable={false}
 				translateExtent={translateExtent}
 			>
-				<GlobalModulesBand bounds={globalBandBounds} />
 				<Background />
+				<ServiceBands services={serviceBounds} />
 				<MiniMap
+					nodeComponent={minimapNodeComponent}
 					nodeColor={(node: ModuleFlowNode) => {
 						if (node.id === minimapSelectedModuleId) {
 							return "var(--graph-color-selected)";
 						}
 						if (isSearchMatch(node)) {
 							return "var(--graph-color-search)";
+						}
+						if (hasNodeClass(node, "dependency-graph-node")) {
+							return "var(--graph-color-dependency)";
+						}
+						if (hasNodeClass(node, "dependent-graph-node")) {
+							return "var(--graph-color-dependent)";
+						}
+						if (hasNodeClass(node, "async-graph-node")) {
+							return "var(--graph-color-async)";
 						}
 						if (node.data.kind === "global") {
 							return "var(--graph-color-global)";
@@ -162,6 +249,15 @@ export function GraphCanvas() {
 						}
 						if (isSearchMatch(node)) {
 							return "var(--mantine-color-indigo-9)";
+						}
+						if (hasNodeClass(node, "dependency-graph-node")) {
+							return "var(--mantine-color-blue-9)";
+						}
+						if (hasNodeClass(node, "dependent-graph-node")) {
+							return "var(--mantine-color-yellow-9)";
+						}
+						if (hasNodeClass(node, "async-graph-node")) {
+							return "var(--graph-color-async)";
 						}
 						if (node.data.kind === "global") {
 							return "var(--mantine-color-grape-9)";
@@ -179,23 +275,19 @@ export function GraphCanvas() {
 					position="bottom-left"
 					style={{ height: 180, width: 230 }}
 					zoomable
-				>
-					{globalBandBounds ? (
-						<rect
-							fill="var(--graph-color-global)"
-							fillOpacity={0.12}
-							height={globalBandBounds.height}
-							pointerEvents="none"
-							rx={16}
-							stroke="var(--graph-color-global)"
-							strokeWidth={8}
-							width={globalBandBounds.width}
-							x={globalBandBounds.x}
-							y={globalBandBounds.y}
-						/>
-					) : null}
-				</MiniMap>
+				/>
 			</ReactFlow>
+
+			{error && (
+				<Alert
+					className="graph-target-error"
+					color="red"
+					title="Some services could not be loaded"
+					variant="light"
+				>
+					{error}
+				</Alert>
+			)}
 
 			<LoadingOverlay
 				visible={loading}
@@ -256,6 +348,10 @@ function getProviderFocusModuleId(
 	return providerFocus?.occurrenceId.split(":")[0] ?? null;
 }
 
+function hasNodeClass(node: ModuleFlowNode, className: string): boolean {
+	return node.className?.split(" ").includes(className) ?? false;
+}
+
 function readStoredLegendOpen(): boolean {
 	if (typeof window === "undefined") return true;
 
@@ -289,57 +385,116 @@ function ModuleDependencyEdge({
 		<BaseEdge
 			path={data?.path ?? fallbackPath}
 			markerEnd={markerEnd}
-			style={data?.color ? { stroke: data.color, strokeWidth: 2 } : undefined}
+			style={
+				data?.color
+					? {
+							stroke: data.color,
+							strokeWidth: data.kind === "operation" ? 3 : 2,
+						}
+					: undefined
+			}
 		/>
 	);
 }
 
-function GlobalModulesBand({
-	bounds,
+function ServiceBands({
+	services,
 }: {
-	bounds: ReturnType<typeof getGlobalModulesBounds>;
+	services: ReturnType<typeof getServiceBounds>;
 }) {
-	if (!bounds) return null;
-
 	return (
 		<ViewportPortal>
-			<div
-				className="global-modules-band"
-				style={{
-					height: bounds.height,
-					transform: `translate(${bounds.x}px, ${bounds.y}px)`,
-					width: bounds.width,
-				}}
-			>
-				<span className="global-modules-band-label">Global modules</span>
-			</div>
+			{services.map((service) => (
+				<div
+					className="service-graph-band"
+					key={service.id}
+					style={{
+						background: service.background,
+						borderColor: getServiceBorderColor(service.id),
+						height: service.height,
+						transform: `translate(${service.x}px, ${service.y}px)`,
+						width: service.width,
+					}}
+				>
+					<span
+						className="service-graph-band-label"
+						style={{ color: service.color }}
+					>
+						{service.name}
+					</span>
+				</div>
+			))}
 		</ViewportPortal>
 	);
 }
 
-function getGlobalModulesBounds(nodes: ModuleFlowNode[]) {
-	const globalNodes = nodes.filter((node) => node.data.kind === "global");
+function getServiceBounds(nodes: ModuleFlowNode[], edges: ModuleFlowEdge[]) {
+	const nodesByService = new Map<string, ModuleFlowNode[]>();
 
-	if (globalNodes.length === 0) return null;
+	for (const node of nodes) {
+		nodesByService.set(node.data.serviceName, [
+			...(nodesByService.get(node.data.serviceName) ?? []),
+			node,
+		]);
+	}
 
-	const paddingX = 18;
-	const paddingTop = 34;
-	const paddingBottom = 18;
-	const minX = Math.min(...globalNodes.map((node) => node.position.x));
-	const minY = Math.min(...globalNodes.map((node) => node.position.y));
-	const maxX = Math.max(
-		...globalNodes.map((node) => node.position.x + getNodeWidth(node)),
+	const paddingX = 40;
+	const paddingTop = 60;
+	// Provider-mode operation links use a 48px vertical lead. Keep the service
+	// boundary beyond that lane so a cross-service segment never sits on it.
+	const paddingBottom = 72;
+
+	return [...nodesByService.entries()].map(([id, serviceNodes]) => {
+		const serviceNodeIds = new Set(serviceNodes.map((node) => node.id));
+		const edgePoints = edges
+			.filter(
+				(edge) =>
+					serviceNodeIds.has(edge.source) && serviceNodeIds.has(edge.target),
+			)
+			.flatMap(getRoutedEdgePoints);
+		const minX = Math.min(
+			...serviceNodes.map((node) => node.position.x),
+			...edgePoints.map((point) => point.x),
+		);
+		const minY = Math.min(
+			...serviceNodes.map((node) => node.position.y),
+			...edgePoints.map((point) => point.y),
+		);
+		const maxX = Math.max(
+			...serviceNodes.map((node) => node.position.x + getNodeWidth(node)),
+			...edgePoints.map((point) => point.x),
+		);
+		const maxY = Math.max(
+			...serviceNodes.map((node) => node.position.y + getNodeHeight(node)),
+			...edgePoints.map((point) => point.y),
+		);
+
+		return {
+			anchorNodeId: serviceNodes[0]?.id ?? id,
+			background: getServiceBackgroundColor(id),
+			color: getServiceColor(id),
+			height: maxY - minY + paddingTop + paddingBottom,
+			id,
+			name: serviceNodes[0]?.data.serviceName ?? id,
+			width: maxX - minX + paddingX * 2,
+			x: minX - paddingX,
+			y: minY - paddingTop,
+		};
+	});
+}
+
+function getRoutedEdgePoints(
+	edge: ModuleFlowEdge,
+): Array<{ x: number; y: number }> {
+	const path = edge.data?.path;
+	if (!path) return [];
+
+	return [...path.matchAll(/[ML]\s+([-\d.]+)\s+([-\d.]+)/g)].map(
+		([, x, y]) => ({
+			x: Number(x),
+			y: Number(y),
+		}),
 	);
-	const maxY = Math.max(
-		...globalNodes.map((node) => node.position.y + getNodeHeight(node)),
-	);
-
-	return {
-		height: maxY - minY + paddingTop + paddingBottom,
-		width: maxX - minX + paddingX * 2,
-		x: minX - paddingX,
-		y: minY - paddingTop,
-	};
 }
 
 // Padding around the content bounding box, so the outermost nodes can still be

@@ -11,6 +11,8 @@ import typescript from "highlight.js/lib/languages/typescript";
 import { useMemo } from "react";
 import { GraphView } from "../graph/GraphView";
 import { RoutePlaygroundView } from "../route-playground/RoutePlaygroundView";
+import { TargetsProvider } from "../targets/TargetsContext";
+import { TargetsView } from "../targets/TargetsView";
 import { createAppRouter } from "./router";
 
 import "highlight.js/styles/atom-one-light.css";
@@ -30,6 +32,7 @@ export function App() {
 			createAppRouter({
 				GraphView,
 				RoutePlaygroundView,
+				TargetsView,
 			}),
 		[],
 	);
@@ -58,7 +61,9 @@ export function App() {
 		>
 			<CodeHighlightAdapterProvider adapter={highlightJsAdapter}>
 				<QueryClientProvider client={queryClient}>
-					<RouterProvider router={router} />
+					<TargetsProvider>
+						<RouterProvider router={router} />
+					</TargetsProvider>
 				</QueryClientProvider>
 			</CodeHighlightAdapterProvider>
 		</MantineProvider>

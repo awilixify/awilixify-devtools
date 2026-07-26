@@ -20,8 +20,10 @@ import type {
 	UseSuspenseQueryResult,
 } from "@tanstack/react-query";
 import { useQuery, useSuspenseQuery } from "@tanstack/react-query";
-
+import { devtoolsFetch } from "../../devtools-fetch";
 import type { GetSettingsResponse } from "../model";
+
+type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
 const withQueryKey = <T extends object, K>(
 	query: T,
@@ -46,21 +48,16 @@ export const getGetDevtoolsSettingsUrl = () => {
 };
 
 /**
- * Returns devtools configuration such as the URL of the proxied app
+ * Returns the service identity and DevTools configuration
  * @summary Get devtools settings
  */
 export const getDevtoolsSettings = async (
 	options?: RequestInit,
 ): Promise<GetSettingsResponse> => {
-	const res = await fetch(getGetDevtoolsSettingsUrl(), {
+	return devtoolsFetch<GetSettingsResponse>(getGetDevtoolsSettingsUrl(), {
 		...options,
 		method: "GET",
 	});
-
-	const body = [204, 205, 304].includes(res.status) ? null : await res.text();
-
-	const data: GetSettingsResponse = body ? JSON.parse(body) : {};
-	return data;
 };
 
 export const getGetDevtoolsSettingsQueryKey = () => {
@@ -78,15 +75,15 @@ export const getGetDevtoolsSettingsQueryOptions = <
 			TData
 		>
 	>;
-	fetch?: RequestInit;
+	request?: SecondParameter<typeof devtoolsFetch>;
 }) => {
-	const { query: queryOptions, fetch: fetchOptions } = options ?? {};
+	const { query: queryOptions, request: requestOptions } = options ?? {};
 
 	const queryKey = queryOptions?.queryKey ?? getGetDevtoolsSettingsQueryKey();
 
 	const queryFn: QueryFunction<
 		Awaited<ReturnType<typeof getDevtoolsSettings>>
-	> = ({ signal }) => getDevtoolsSettings({ signal, ...fetchOptions });
+	> = ({ signal }) => getDevtoolsSettings({ signal, ...requestOptions });
 
 	return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
 		Awaited<ReturnType<typeof getDevtoolsSettings>>,
@@ -120,7 +117,7 @@ export function useGetDevtoolsSettings<
 				>,
 				"initialData"
 			>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): DefinedUseQueryResult<TData, TError> & {
@@ -146,7 +143,7 @@ export function useGetDevtoolsSettings<
 				>,
 				"initialData"
 			>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & {
@@ -164,7 +161,7 @@ export function useGetDevtoolsSettings<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & {
@@ -186,7 +183,7 @@ export function useGetDevtoolsSettings<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseQueryResult<TData, TError> & {
@@ -213,15 +210,15 @@ export const getGetDevtoolsSettingsSuspenseQueryOptions = <
 			TData
 		>
 	>;
-	fetch?: RequestInit;
+	request?: SecondParameter<typeof devtoolsFetch>;
 }) => {
-	const { query: queryOptions, fetch: fetchOptions } = options ?? {};
+	const { query: queryOptions, request: requestOptions } = options ?? {};
 
 	const queryKey = queryOptions?.queryKey ?? getGetDevtoolsSettingsQueryKey();
 
 	const queryFn: QueryFunction<
 		Awaited<ReturnType<typeof getDevtoolsSettings>>
-	> = ({ signal }) => getDevtoolsSettings({ signal, ...fetchOptions });
+	> = ({ signal }) => getDevtoolsSettings({ signal, ...requestOptions });
 
 	return { queryKey, queryFn, ...queryOptions } as UseSuspenseQueryOptions<
 		Awaited<ReturnType<typeof getDevtoolsSettings>>,
@@ -247,7 +244,7 @@ export function useGetDevtoolsSettingsSuspense<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseSuspenseQueryResult<TData, TError> & {
@@ -265,7 +262,7 @@ export function useGetDevtoolsSettingsSuspense<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseSuspenseQueryResult<TData, TError> & {
@@ -283,7 +280,7 @@ export function useGetDevtoolsSettingsSuspense<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseSuspenseQueryResult<TData, TError> & {
@@ -305,7 +302,7 @@ export function useGetDevtoolsSettingsSuspense<
 				TData
 			>
 		>;
-		fetch?: RequestInit;
+		request?: SecondParameter<typeof devtoolsFetch>;
 	},
 	queryClient?: QueryClient,
 ): UseSuspenseQueryResult<TData, TError> & {

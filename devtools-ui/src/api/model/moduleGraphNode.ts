@@ -7,6 +7,7 @@
  */
 import type { DynamicModuleInfo } from "./dynamicModuleInfo";
 import type { ModuleGraphEntrypoint } from "./moduleGraphEntrypoint";
+import type { ModuleGraphMessageRef } from "./moduleGraphMessageRef";
 import type { ModuleGraphNodeBase } from "./moduleGraphNodeBase";
 import type { ModuleGraphNodeCommandHandlerKeys } from "./moduleGraphNodeCommandHandlerKeys";
 import type { ModuleGraphNodeCommandPreHandlerClassNames } from "./moduleGraphNodeCommandPreHandlerClassNames";
@@ -28,6 +29,7 @@ import type { ModuleGraphNodeProviderValues } from "./moduleGraphNodeProviderVal
 import type { ModuleGraphNodeQueryHandlerKeys } from "./moduleGraphNodeQueryHandlerKeys";
 import type { ModuleGraphNodeQueryPreHandlerClassNames } from "./moduleGraphNodeQueryPreHandlerClassNames";
 import type { ModuleGraphNodeQueryPreHandlerLifetimeTypes } from "./moduleGraphNodeQueryPreHandlerLifetimeTypes";
+import type { ModuleGraphOperationRef } from "./moduleGraphOperationRef";
 import type { ModuleGraphRoute } from "./moduleGraphRoute";
 import type { ModuleProviderImpact } from "./moduleProviderImpact";
 
@@ -75,6 +77,10 @@ export interface ModuleGraphNode {
 	initializerExports: string[];
 	initializerClassNames: ModuleGraphNodeInitializerClassNames;
 	entrypoints: ModuleGraphEntrypoint[];
+	ownOperationIds: string[];
+	calledOperations: ModuleGraphOperationRef[];
+	publishedMessageTypes: string[];
+	subscribedMessages: ModuleGraphMessageRef[];
 	routes: ModuleGraphRoute[];
 	instances: ModuleGraphNodeBase[];
 	impact: ModuleProviderImpact;

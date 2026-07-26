@@ -15,6 +15,7 @@ import { useState } from "react";
 import type { LifetimeType, ModuleProviderImpact } from "@/api/model/index";
 import type { RoutePlaygroundSearch } from "../../../route-playground/route";
 import { RoutePlaygroundModes } from "../../../route-playground/use-route-playground-settings";
+import { useTargets } from "../../../targets/TargetsContext";
 import { useGraphSettings } from "../../GraphSettingsContext";
 import type {
 	ModuleFlowNode,
@@ -84,6 +85,7 @@ export function ProviderBadge({
 	source: ProviderSource;
 }) {
 	const navigate = useNavigate({ from: "/" });
+	const { selectTarget } = useTargets();
 	const { providerFocusHighlight, searchQuery, setProviderFocus } =
 		useGraphSettings();
 	const [valueRevealed, setValueRevealed] = useState(false);
@@ -130,6 +132,7 @@ export function ProviderBadge({
 			return;
 		}
 
+		selectTarget(data.serviceName);
 		navigate({
 			to: "/routes",
 			search: {

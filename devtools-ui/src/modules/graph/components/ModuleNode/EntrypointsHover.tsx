@@ -5,13 +5,17 @@ import type { LifetimeType, ModuleGraphNode } from "@/api/model";
 import { formatEntrypointId } from "../../../route-playground/components/invocation-paper/EntrypointInvocationPaper";
 import type { RoutePlaygroundSearch } from "../../../route-playground/route";
 import { RoutePlaygroundModes } from "../../../route-playground/use-route-playground-settings";
-import type { ModuleFlowNode } from "../../types";
+import { useTargets } from "../../../targets/TargetsContext";
+import { getInvocationModuleId } from "../../module-id";
+import type { EntrypointRelationStyle, ModuleFlowNode } from "../../types";
 import drawerStyles from "../ModuleDrawer/ModuleInspector.module.css";
 import styles from "./ModuleNode.module.css";
 import { LifetimeTypeIcon } from "./ProviderIcons";
 
 export function EntrypointsHover({ data }: { data: ModuleFlowNode["data"] }) {
 	const navigate = useNavigate({ from: "/" });
+	const { selectTarget } = useTargets();
+	const moduleId = getInvocationModuleId(data);
 	const nonHttpGroups = groupEntrypointsByType(
 		data.entrypoints.filter((entrypoint) => entrypoint.type !== "http"),
 	);
@@ -22,11 +26,12 @@ export function EntrypointsHover({ data }: { data: ModuleFlowNode["data"] }) {
 	if (total === 0) return null;
 
 	const openRouteInPlayground = (route: ModuleGraphNode["routes"][number]) => {
+		selectTarget(data.serviceName);
 		navigate({
 			to: "/routes",
 			search: {
 				mode: RoutePlaygroundModes.route,
-				route: formatRouteId(data.id, route),
+				route: formatRouteId(moduleId, route),
 			} satisfies RoutePlaygroundSearch,
 		});
 	};
@@ -34,12 +39,13 @@ export function EntrypointsHover({ data }: { data: ModuleFlowNode["data"] }) {
 	const openEntrypointInPlayground = (
 		entrypoint: ModuleGraphNode["entrypoints"][number],
 	) => {
+		selectTarget(data.serviceName);
 		navigate({
 			to: "/routes",
 			search: {
-				entrypoint: formatEntrypointId(data.id, entrypoint),
+				entrypoint: formatEntrypointId(moduleId, entrypoint),
 				mode: RoutePlaygroundModes.entrypoint,
-				module: data.id,
+				module: moduleId,
 			} satisfies RoutePlaygroundSearch,
 		});
 	};
@@ -79,6 +85,9 @@ export function EntrypointsHover({ data }: { data: ModuleFlowNode["data"] }) {
 									key={formatRouteKey(route)}
 									lifetime={data.controllerLifetimeTypes[route.controller]}
 									onClick={() => openRouteInPlayground(route)}
+									relation={
+										data.entrypointRelationByOperationKey[route.operationId]
+									}
 									route={route}
 								/>
 							))}
@@ -97,6 +106,11 @@ export function EntrypointsHover({ data }: { data: ModuleFlowNode["data"] }) {
 									key={formatEntrypointKey(entrypoint)}
 									lifetime={data.controllerLifetimeTypes[entrypoint.controller]}
 									onClick={() => openEntrypointInPlayground(entrypoint)}
+									relation={
+										data.entrypointRelationByOperationKey[
+											getEntrypointOperationKey(entrypoint) ?? ""
+										]
+									}
 								/>
 							))}
 						</EntrypointSubGroup>
@@ -139,10 +153,12 @@ function RouteCard({
 	lifetime,
 	route,
 	onClick,
+	relation,
 }: {
 	lifetime?: LifetimeType;
 	route: ModuleGraphNode["routes"][number];
 	onClick: () => void;
+	relation?: EntrypointRelationStyle;
 }) {
 	return (
 		<Group
@@ -151,6 +167,7 @@ function RouteCard({
 			gap={8}
 			onClick={onClick}
 			p={6}
+			style={getRelationStyle(relation)}
 			wrap="nowrap"
 		>
 			<Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
@@ -173,10 +190,12 @@ function EntrypointCard({
 	entrypoint,
 	lifetime,
 	onClick,
+	relation,
 }: {
 	entrypoint: ModuleGraphNode["entrypoints"][number];
 	lifetime?: LifetimeType;
 	onClick: () => void;
+	relation?: EntrypointRelationStyle;
 }) {
 	const decorator = getEntrypointDecorator(entrypoint);
 
@@ -187,6 +206,7 @@ function EntrypointCard({
 			gap={8}
 			onClick={onClick}
 			p={6}
+			style={getRelationStyle(relation)}
 			wrap="nowrap"
 		>
 			<Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
@@ -213,6 +233,29 @@ function EntrypointCard({
 			<LifetimeTypeIcon lifetime={lifetime} />
 		</Group>
 	);
+}
+
+function getRelationStyle(relation?: EntrypointRelationStyle) {
+	if (!relation) return undefined;
+
+	return {
+		borderColor: relation.color,
+		borderStyle: relation.borderStyle,
+		borderWidth: 2,
+	};
+}
+
+function getEntrypointOperationKey(
+	entrypoint: ModuleGraphNode["entrypoints"][number],
+): string | null {
+	const metadata = entrypoint.metadata;
+	if (!metadata || typeof metadata !== "object") return null;
+
+	const message = (metadata as { message?: unknown }).message;
+	if (!message || typeof message !== "object") return null;
+
+	const type = (message as { type?: unknown }).type;
+	return typeof type === "string" ? type : null;
 }
 
 function getEntrypointDecorator(

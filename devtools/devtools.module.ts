@@ -23,7 +23,9 @@ import { DecoratorScanner } from "./module-graph/decorator-scanner.js";
 import { ProviderImpactAnalyzer } from "./provider-impact/analyzer.js";
 import { Tracer } from "./trace/tracer.js";
 
-type Options = {
+export type DevtoolsOptions = {
+	/** Stable service identifier used to qualify graph module and trace IDs. */
+	serviceName: string;
 	host?: string;
 	port?: number;
 	/** URL of the real app to proxy non-devtools requests to (e.g., "http://localhost:3000") */
@@ -38,7 +40,7 @@ type Options = {
 
 export type DevtoolsModuleDef = ModuleDef<{
 	providers: {
-		options: Options;
+		options: DevtoolsOptions;
 		fastify: FastifyInstance;
 		graphCollector: ModuleGraphCollector;
 		providerImpactAnalyzer: ProviderImpactAnalyzer;
@@ -68,7 +70,13 @@ export type DevtoolsModuleDef = ModuleDef<{
 
 export type Deps = DevtoolsModuleDef["deps"];
 
-export const DevtoolsModule = (options: Options = {}) => {
+export const DevtoolsModule = (options: DevtoolsOptions) => {
+	if (!options || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(options.serviceName)) {
+		throw new Error(
+			'DevtoolsModule "serviceName" must contain lowercase letters, numbers, and single hyphens only',
+		);
+	}
+
 	return createModule<DevtoolsModuleDef>({
 		name: "DevtoolsModule",
 		controllers: [DevtoolsApiController],

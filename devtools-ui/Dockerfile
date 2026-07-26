@@ -21,15 +21,15 @@ ARG IMAGE_VERSION=0.1.0
 
 LABEL org.opencontainers.image.title="Awilixify DevTools UI" \
 	org.opencontainers.image.description="Web interface for Awilixify DevTools APIs" \
-	org.opencontainers.image.source="https://github.com/wildstyles/awilixify-devtools" \
+	org.opencontainers.image.source="https://github.com/awilixify/awilixify-devtools" \
 	org.opencontainers.image.revision="${IMAGE_REVISION}" \
 	org.opencontainers.image.version="${IMAGE_VERSION}" \
 	org.opencontainers.image.licenses="MIT"
 
-ENV DEVTOOLS_API_URL=http://host.docker.internal:3221 \
-	NGINX_ENVSUBST_FILTER=DEVTOOLS_API_URL
+RUN apk add --no-cache yq
 
-COPY nginx/default.conf.template /etc/nginx/templates/default.conf.template
+COPY nginx/default.conf /etc/nginx/conf.d/default.conf
+COPY --chmod=755 docker/configure-devtools-targets.sh /docker-entrypoint.d/15-configure-devtools-targets.sh
 COPY --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 3222

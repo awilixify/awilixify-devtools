@@ -13,6 +13,7 @@ import { useGetDevtoolsGraphSuspense } from "@/api/graph/graph";
 import type { GetGraphResponse, ModuleGraphEntrypoint } from "@/api/model";
 import { usePostDevtoolsPlaygroundInvoke } from "@/api/playground/playground";
 import { useGetDevtoolsTraces } from "@/api/traces/traces";
+import { useRefreshEntryTraces } from "../../entry-traces";
 import type { RoutePlaygroundSearch } from "../../route";
 import { packUrlState, unpackUrlState } from "../../url-state";
 import {
@@ -37,6 +38,7 @@ export function EntrypointInvocationPaper() {
 	const navigate = useNavigate({ from: "/routes" });
 	const { data: graph } = useGetDevtoolsGraphSuspense();
 	const { refetch: refetchTraces } = useGetDevtoolsTraces();
+	const refreshEntryTraces = useRefreshEntryTraces();
 	const { setSelectedTraceId, setViewMode } = useRoutePlaygroundSettings();
 
 	const selectedModuleId = routeSearch.module ?? null;
@@ -129,7 +131,8 @@ export function EntrypointInvocationPaper() {
 		mutation: {
 			onSuccess: async (response) => {
 				await refetchTraces();
-				setSelectedTraceId(response.traceId);
+				await refreshEntryTraces();
+				setSelectedTraceId(response.traceId, "full");
 				setViewMode(RoutePlaygroundViewModes.trace);
 			},
 		},
@@ -315,14 +318,32 @@ function formatEntrypointName(
 }
 
 function formatEntrypointDecorator(
-	entrypoint: Pick<ModuleGraphEntrypoint, "decoratorName" | "label" | "type">,
+	entrypoint: Pick<
+		ModuleGraphEntrypoint,
+		"decoratorArguments" | "decoratorName" | "label" | "type"
+	>,
 ): string {
 	const decoratorName =
 		entrypoint.decoratorName ?? entrypoint.type.replace(/\s+/g, "");
 
+	// The decorator's argument text is captured verbatim from source (message
+	// contract identifier and all), but with its original line breaks/indentation;
+	// collapse it to one tidy line for the preview. Fall back to the derived label
+	// when source isn't available (e.g. a built deployment).
+	if (entrypoint.decoratorArguments) {
+		return `@${decoratorName}(${normalizeDecoratorArguments(entrypoint.decoratorArguments)})`;
+	}
+
 	return entrypoint.label && entrypoint.label !== entrypoint.type
 		? `@${decoratorName}(${entrypoint.label})`
 		: `@${decoratorName}`;
+}
+
+function normalizeDecoratorArguments(args: string): string {
+	return args
+		.replace(/\s+/g, " ") // collapse source newlines/tabs/indentation
+		.replace(/,(\s*[}\]])/g, "$1") // drop trailing commas before } or ]
+		.trim();
 }
 
 export function formatEntrypointId(

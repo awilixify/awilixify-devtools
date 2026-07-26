@@ -22,6 +22,7 @@ import type { ModuleGraphRoute } from "@/api/model";
 import { useGetDevtoolsSettings } from "@/api/settings/settings";
 import { getMethodColor } from "../../http-method-color";
 import type { RoutePlaygroundSearch } from "../../route";
+import { getActiveTargetAppPath } from "../../../targets/target-routing";
 import {
 	formatStateField,
 	isDefaultStateField,
@@ -90,7 +91,7 @@ export function RouteInvocationPaper() {
 		PreparedFetchData
 	>({
 		mutationFn: async (fetchData) => {
-			const response = await fetch(fetchData.url, {
+			const response = await fetch(getActiveTargetAppPath(fetchData.url), {
 				body: fetchData.body,
 				headers: fetchData.headers,
 				method: fetchData.method,
@@ -260,158 +261,153 @@ export function RouteInvocationPaper() {
 	};
 
 	return (
-		<Paper>
-			<Stack gap="md">
-				<Group align="flex-end" gap="sm" wrap="nowrap">
-					<Select
-						clearable
-						data={routes}
-						label="Route"
-						leftSection={
-							selectedRoute && (
+		<Stack gap="md">
+			<Group align="flex-end" gap="sm" wrap="nowrap">
+				<Select
+					clearable
+					data={routes}
+					label="Route"
+					leftSection={
+						selectedRoute && (
+							<Badge
+								color={getMethodColor(selectedRoute.method)}
+								size="xs"
+								variant="filled"
+								style={{ minWidth: 50 }}
+							>
+								{selectedRoute.method}
+							</Badge>
+						)
+					}
+					leftSectionWidth={selectedRoute ? 62 : undefined}
+					nothingFoundMessage="No routes"
+					onChange={handleRouteChange}
+					placeholder="Select route"
+					renderOption={({ option }) => {
+						const { method, moduleName } = option as {
+							method: string;
+							moduleName: string;
+						} & ComboboxItem;
+
+						return (
+							<Group gap="xs" wrap="nowrap">
 								<Badge
-									color={getMethodColor(selectedRoute.method)}
+									color={getMethodColor(method)}
 									size="xs"
 									variant="filled"
 									style={{ minWidth: 50 }}
 								>
-									{selectedRoute.method}
+									{method}
 								</Badge>
-							)
-						}
-						leftSectionWidth={selectedRoute ? 62 : undefined}
-						nothingFoundMessage="No routes"
-						onChange={handleRouteChange}
-						placeholder="Select route"
-						renderOption={({ option }) => {
-							const { method, moduleName } = option as {
-								method: string;
-								moduleName: string;
-							} & ComboboxItem;
+								<Text size="sm" style={{ flex: 1 }} truncate>
+									{option.label}
+								</Text>
+								<Badge color="gray" size="xs" variant="light">
+									{moduleName}
+								</Badge>
+							</Group>
+						);
+					}}
+					searchable
+					style={{ flex: 1 }}
+					value={selectedRouteId}
+				/>
+				<Button
+					disabled={!selectedRoute || hasFieldErrors}
+					loading={mutation.isPending}
+					onClick={handleSubmit}
+				>
+					Send
+				</Button>
+			</Group>
 
-							return (
-								<Group gap="xs" wrap="nowrap">
-									<Badge
-										color={getMethodColor(method)}
-										size="xs"
-										variant="filled"
-										style={{ minWidth: 50 }}
-									>
-										{method}
-									</Badge>
-									<Text size="sm" style={{ flex: 1 }} truncate>
-										{option.label}
-									</Text>
-									<Badge color="gray" size="xs" variant="light">
-										{moduleName}
-									</Badge>
-								</Group>
-							);
-						}}
-						searchable
-						style={{ flex: 1 }}
-						value={selectedRouteId}
-					/>
-					<Button
-						disabled={!selectedRoute || hasFieldErrors}
-						loading={mutation.isPending}
-						onClick={handleSubmit}
-					>
-						Send
-					</Button>
-				</Group>
-
-				<Stack gap={6}>
-					<Text fw={700} size="sm">
-						Request
-					</Text>
-					<Group align="center" gap="xs" wrap="nowrap">
-						<Tooltip label={requestPreview} maw={560} multiline openDelay={300}>
-							<Code
-								block
-								style={{
-									flex: 1,
-									overflow: "hidden",
-									textOverflow: "ellipsis",
-									whiteSpace: "nowrap",
-								}}
-							>
-								{requestPreview}
-							</Code>
-						</Tooltip>
-						<Stack gap={4}>
-							<Tooltip label={curlCopied ? "Copied!" : "Copy as curl"}>
-								<ActionIcon
-									color={curlCopied ? "green" : "gray"}
-									disabled={!selectedRoute || hasFieldErrors}
-									onClick={copyCurl}
-									size="sm"
-									variant="subtle"
-								>
-									<CopyIcon />
-								</ActionIcon>
-							</Tooltip>
-							<CurlImportModal onApply={handleCurlImport} routes={routes} />
-						</Stack>
-					</Group>
-				</Stack>
-
-				{error && (
-					<Alert color="red" title="Request failed">
-						{error}
-					</Alert>
-				)}
-
-				<Tabs defaultValue="params" keepMounted={false} ref={editorsRef}>
-					<Tabs.List>
-						<Tabs.Tab value="params" c={fieldErrors.params ? "red" : undefined}>
-							Params
-						</Tabs.Tab>
-						<Tabs.Tab value="query" c={fieldErrors.query ? "red" : undefined}>
-							Query
-						</Tabs.Tab>
-						<Tabs.Tab value="body" c={fieldErrors.body ? "red" : undefined}>
-							Body
-						</Tabs.Tab>
-						<Tabs.Tab
-							value="headers"
-							c={fieldErrors.headers ? "red" : undefined}
+			<Stack gap={6}>
+				<Text fw={700} size="sm">
+					Request
+				</Text>
+				<Group align="center" gap="xs" wrap="nowrap">
+					<Tooltip label={requestPreview} maw={560} multiline openDelay={300}>
+						<Code
+							block
+							style={{
+								flex: 1,
+								overflow: "hidden",
+								textOverflow: "ellipsis",
+								whiteSpace: "nowrap",
+							}}
 						>
-							Headers
-						</Tabs.Tab>
-					</Tabs.List>
-
-					<Tabs.Panel pt="sm" value="params">
-						<JsonEditor
-							value={payload.params}
-							onChange={(value) => updatePayload("params", value)}
-							hasError={fieldErrors.params}
-						/>
-					</Tabs.Panel>
-					<Tabs.Panel pt="sm" value="query">
-						<JsonEditor
-							value={payload.query}
-							onChange={(value) => updatePayload("query", value)}
-							hasError={fieldErrors.query}
-						/>
-					</Tabs.Panel>
-					<Tabs.Panel pt="sm" value="body">
-						<JsonEditor
-							value={payload.body}
-							onChange={(value) => updatePayload("body", value)}
-							hasError={fieldErrors.body}
-						/>
-					</Tabs.Panel>
-					<Tabs.Panel pt="sm" value="headers">
-						<JsonEditor
-							value={payload.headers}
-							onChange={(value) => updatePayload("headers", value)}
-							hasError={fieldErrors.headers}
-						/>
-					</Tabs.Panel>
-				</Tabs>
+							{requestPreview}
+						</Code>
+					</Tooltip>
+					<Stack gap={4}>
+						<Tooltip label={curlCopied ? "Copied!" : "Copy as curl"}>
+							<ActionIcon
+								color={curlCopied ? "green" : "gray"}
+								disabled={!selectedRoute || hasFieldErrors}
+								onClick={copyCurl}
+								size="sm"
+								variant="subtle"
+							>
+								<CopyIcon />
+							</ActionIcon>
+						</Tooltip>
+						<CurlImportModal onApply={handleCurlImport} routes={routes} />
+					</Stack>
+				</Group>
 			</Stack>
-		</Paper>
+
+			{error && (
+				<Alert color="red" title="Request failed">
+					{error}
+				</Alert>
+			)}
+
+			<Tabs defaultValue="params" keepMounted={false} ref={editorsRef}>
+				<Tabs.List>
+					<Tabs.Tab value="params" c={fieldErrors.params ? "red" : undefined}>
+						Params
+					</Tabs.Tab>
+					<Tabs.Tab value="query" c={fieldErrors.query ? "red" : undefined}>
+						Query
+					</Tabs.Tab>
+					<Tabs.Tab value="body" c={fieldErrors.body ? "red" : undefined}>
+						Body
+					</Tabs.Tab>
+					<Tabs.Tab value="headers" c={fieldErrors.headers ? "red" : undefined}>
+						Headers
+					</Tabs.Tab>
+				</Tabs.List>
+
+				<Tabs.Panel pt="sm" value="params">
+					<JsonEditor
+						value={payload.params}
+						onChange={(value) => updatePayload("params", value)}
+						hasError={fieldErrors.params}
+					/>
+				</Tabs.Panel>
+				<Tabs.Panel pt="sm" value="query">
+					<JsonEditor
+						value={payload.query}
+						onChange={(value) => updatePayload("query", value)}
+						hasError={fieldErrors.query}
+					/>
+				</Tabs.Panel>
+				<Tabs.Panel pt="sm" value="body">
+					<JsonEditor
+						value={payload.body}
+						onChange={(value) => updatePayload("body", value)}
+						hasError={fieldErrors.body}
+					/>
+				</Tabs.Panel>
+				<Tabs.Panel pt="sm" value="headers">
+					<JsonEditor
+						value={payload.headers}
+						onChange={(value) => updatePayload("headers", value)}
+						hasError={fieldErrors.headers}
+					/>
+				</Tabs.Panel>
+			</Tabs>
+		</Stack>
 	);
 }
 

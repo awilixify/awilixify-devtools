@@ -2,6 +2,12 @@ import { Badge, Group, Paper, Stack, Text } from "@mantine/core";
 import { Handle, type NodeProps, Position } from "@xyflow/react";
 import clsx from "clsx";
 import { useGraphSettings } from "../../GraphSettingsContext";
+import {
+	CALLED_OPERATION_HANDLE_ID,
+	MODULE_SOURCE_HANDLE_ID,
+	MODULE_TARGET_HANDLE_ID,
+	OWN_OPERATION_HANDLE_ID,
+} from "../../operation-handles";
 import type { ModuleFlowNode } from "../../types";
 import { EntrypointsHover } from "./EntrypointsHover";
 import { GlobalProvidersHover } from "./GlobalProvidersHover";
@@ -29,7 +35,23 @@ export function ModuleNode({ data, selected }: NodeProps<ModuleFlowNode>) {
 				"--module-node-border-color": data.providerRelationColor,
 			}}
 		>
-			{!isProviderMode && <Handle type="target" position={Position.Left} />}
+			{!isProviderMode && (
+				<Handle
+					id={MODULE_TARGET_HANDLE_ID}
+					type="target"
+					position={Position.Left}
+				/>
+			)}
+			<Handle
+				id={OWN_OPERATION_HANDLE_ID}
+				type="target"
+				position={Position.Top}
+			/>
+			<Handle
+				id={CALLED_OPERATION_HANDLE_ID}
+				type="source"
+				position={Position.Bottom}
+			/>
 
 			<Group gap={6} justify="space-between" wrap="nowrap">
 				<Text component="strong" fw={700} truncate>
@@ -75,7 +97,13 @@ export function ModuleNode({ data, selected }: NodeProps<ModuleFlowNode>) {
 				</Group>
 			)}
 
-			{!isProviderMode && <Handle type="source" position={Position.Right} />}
+			{!isProviderMode && (
+				<Handle
+					id={MODULE_SOURCE_HANDLE_ID}
+					type="source"
+					position={Position.Right}
+				/>
+			)}
 		</Paper>
 	);
 }

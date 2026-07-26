@@ -15,6 +15,7 @@ import {
 	usePostDevtoolsPlaygroundInvoke,
 } from "@/api/playground/playground.js";
 import { useGetDevtoolsTraces } from "@/api/traces/traces";
+import { useRefreshEntryTraces } from "../../entry-traces";
 import type { RoutePlaygroundSearch } from "../../route";
 import { packUrlState, unpackUrlState } from "../../url-state";
 import {
@@ -31,6 +32,7 @@ export function ProviderInvocationPaper() {
 
 	const { setSelectedTraceId, setViewMode } = useRoutePlaygroundSettings();
 	const { refetch: refetchTraces } = useGetDevtoolsTraces();
+	const refreshEntryTraces = useRefreshEntryTraces();
 
 	const selectedScopeModuleId = routeSearch.module ?? null;
 	const selectedProviderKey = routeSearch.provider ?? null;
@@ -72,8 +74,9 @@ export function ProviderInvocationPaper() {
 		mutation: {
 			onSuccess: async (response) => {
 				await refetchTraces();
+				await refreshEntryTraces();
 
-				setSelectedTraceId(response.traceId);
+				setSelectedTraceId(response.traceId, "full");
 				setViewMode(RoutePlaygroundViewModes.trace);
 			},
 		},
@@ -234,111 +237,109 @@ export function ProviderInvocationPaper() {
 	};
 
 	return (
-		<Paper>
-			<Stack gap="md">
-				<Group align="flex-start" grow wrap="nowrap">
-					<Select
-						clearable
-						data={moduleOptions}
-						label="Module"
-						nothingFoundMessage="No modules"
-						onChange={(module) =>
-							updateRouteSearch({
-								method: undefined,
-								provider: undefined,
-								module: module ?? undefined,
-							})
-						}
-						placeholder="Select module"
-						searchable
-						value={selectedScopeModuleId}
-					/>
+		<Stack gap="md">
+			<Group align="flex-start" grow wrap="nowrap">
+				<Select
+					clearable
+					data={moduleOptions}
+					label="Module"
+					nothingFoundMessage="No modules"
+					onChange={(module) =>
+						updateRouteSearch({
+							method: undefined,
+							provider: undefined,
+							module: module ?? undefined,
+						})
+					}
+					placeholder="Select module"
+					searchable
+					value={selectedScopeModuleId}
+				/>
 
-					<Select
-						clearable
-						data={providerOptions}
-						label="Provider"
-						nothingFoundMessage="No providers"
-						onChange={selectProvider}
-						placeholder="Select provider"
-						searchable
-						value={playgroundProviderKey}
-					/>
+				<Select
+					clearable
+					data={providerOptions}
+					label="Provider"
+					nothingFoundMessage="No providers"
+					onChange={selectProvider}
+					placeholder="Select provider"
+					searchable
+					value={playgroundProviderKey}
+				/>
 
-					<Select
-						clearable
-						data={methods}
-						disabled={!selectedProvider}
-						label="Method"
-						nothingFoundMessage="No methods"
-						onChange={(method) =>
-							updateRouteSearch({ method: method ?? undefined })
-						}
-						placeholder="Select method"
-						searchable
-						value={selectedMethod}
-					/>
-				</Group>
+				<Select
+					clearable
+					data={methods}
+					disabled={!selectedProvider}
+					label="Method"
+					nothingFoundMessage="No methods"
+					onChange={(method) =>
+						updateRouteSearch({ method: method ?? undefined })
+					}
+					placeholder="Select method"
+					searchable
+					value={selectedMethod}
+				/>
+			</Group>
 
-				<Stack gap={6}>
-					<Group gap="xs">
-						<Text fw={700} size="sm">
-							Invocation
-						</Text>
-						{importedFromModuleName ? (
-							<Badge color="grape" size="sm" variant="light">
-								imported from {importedFromModuleName}
-							</Badge>
-						) : null}
-					</Group>
-					<Group gap="sm" wrap="nowrap">
-						<InvocationPreview code={invocationPreview} />
-						<Button
-							disabled={!selectedProvider || !selectedMethod || hasArgsError}
-							loading={invokeMutation.isPending}
-							onClick={runInvocation}
-						>
-							Run
-						</Button>
-					</Group>
-				</Stack>
-
-				<Stack gap={6}>
+			<Stack gap={6}>
+				<Group gap="xs">
 					<Text fw={700} size="sm">
-						Arguments
+						Invocation
 					</Text>
-
-					<Textarea
-						autosize
-						error={hasArgsError}
-						maxRows={6}
-						minRows={6}
-						onChange={(event) => {
-							const value = event.currentTarget.value;
-							setArgsInput(value);
-
-							// Invalid JSON keeps the last valid URL state; it syncs
-							// again once fixed.
-							const packed = packProviderArgs(value);
-							if (packed !== null) {
-								updateRouteSearch({ state: packed });
-							}
-						}}
-						placeholder={'"arg1", "arg2"'}
-						ref={argsInputRef}
-						spellCheck={false}
-						styles={{
-							input: {
-								fontSize: 13,
-								fontFamily:
-									"ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-							},
-						}}
-						value={argsInput}
-					/>
-				</Stack>
+					{importedFromModuleName ? (
+						<Badge color="grape" size="sm" variant="light">
+							imported from {importedFromModuleName}
+						</Badge>
+					) : null}
+				</Group>
+				<Group gap="sm" wrap="nowrap">
+					<InvocationPreview code={invocationPreview} />
+					<Button
+						disabled={!selectedProvider || !selectedMethod || hasArgsError}
+						loading={invokeMutation.isPending}
+						onClick={runInvocation}
+					>
+						Run
+					</Button>
+				</Group>
 			</Stack>
-		</Paper>
+
+			<Stack gap={6}>
+				<Text fw={700} size="sm">
+					Arguments
+				</Text>
+
+				<Textarea
+					autosize
+					error={hasArgsError}
+					maxRows={6}
+					minRows={6}
+					onChange={(event) => {
+						const value = event.currentTarget.value;
+						setArgsInput(value);
+
+						// Invalid JSON keeps the last valid URL state; it syncs
+						// again once fixed.
+						const packed = packProviderArgs(value);
+						if (packed !== null) {
+							updateRouteSearch({ state: packed });
+						}
+					}}
+					placeholder={'"arg1", "arg2"'}
+					ref={argsInputRef}
+					spellCheck={false}
+					styles={{
+						input: {
+							fontSize: 13,
+							fontFamily:
+								"ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+						},
+					}}
+					value={argsInput}
+				/>
+			</Stack>
+		</Stack>
 	);
 }
 

@@ -43,6 +43,7 @@ export function getProviderGroupColorByModuleId(
 
 	let index = 0;
 	for (const edge of edges) {
+		if (edge.type !== "imports") continue;
 		if (edge.from !== selectedModuleId) continue;
 		if (byModuleId[edge.to]) continue;
 		byModuleId[edge.to] =
@@ -130,7 +131,7 @@ export function getImportedProviderGroups(
 	colorByModuleId: Record<string, string>,
 ): ModuleProviderGroup[] {
 	return edges
-		.filter((edge) => edge.from === moduleId)
+		.filter((edge) => edge.from === moduleId && edge.type === "imports")
 		.flatMap((edge) => {
 			const module = moduleById.get(edge.to);
 

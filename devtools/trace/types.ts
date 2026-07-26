@@ -1,7 +1,9 @@
+import type { TracePropagationContext } from "awilixify/devtools";
 import type { ConsoleEntry, Trace, TraceSpan } from "../dtos/index.js";
 
 export type ActiveTrace = {
 	trace: Trace;
+	propagationContext: TracePropagationContext;
 	currentSpanId: string | null;
 	currentConsoleEntries: ConsoleEntry[];
 	counter: {

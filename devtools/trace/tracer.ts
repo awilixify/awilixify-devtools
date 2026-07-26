@@ -17,14 +17,28 @@ const DEFAULT_TRACE_HISTORY_FILE = ".awilixify-devtools/traces.json";
 export class Tracer implements ITracer {
 	private readonly traceStore: DevtoolsTraceStore;
 
-	constructor(options: Deps["options"]) {
+	constructor(
+		options: Deps["options"],
+		graphCollector: Deps["graphCollector"],
+	) {
 		this.traceStore = new DevtoolsTraceStore(
+			options.serviceName,
 			resolveTraceHistoryFile(options.traceHistoryFile),
+			(className, methodName) =>
+				graphCollector.findEntrypoint(className, methodName),
 		);
 	}
 
 	getTraces() {
 		return this.traceStore.getTraces();
+	}
+
+	// Streams finished traces to a subscriber (used by the SSE endpoint). Returns
+	// an unsubscribe function.
+	subscribe(
+		listener: (trace: ReturnType<Tracer["getTraces"]>[number]) => void,
+	) {
+		return this.traceStore.subscribe(listener);
 	}
 
 	getTrace(traceId: string) {
