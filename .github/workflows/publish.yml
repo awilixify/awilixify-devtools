@@ -34,12 +34,14 @@ jobs:
         with:
           node-version: 24.x
           registry-url: https://registry.npmjs.org
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
       - name: Configure Git
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
       - name: Install dependencies
-        run: npm install
+        run: pnpm install --frozen-lockfile
       - name: Determine version bump
         id: version
         run: |
@@ -55,13 +57,13 @@ jobs:
       - name: Bump version
         run: |
           npm version ${{ steps.version.outputs.bump }} --no-git-tag-version
-          npm run lint:fix
+          pnpm lint:fix
           git add -A
           git commit -m "chore: release v$(node -p "require('./package.json').version")"
           git tag "v$(node -p "require('./package.json').version")"
           git push
           git push --tags
       - name: Build
-        run: npm run build:release
+        run: pnpm build:release
       - name: Publish to npm
         run: npm publish --provenance --access public
