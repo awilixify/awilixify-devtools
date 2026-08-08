@@ -102,7 +102,7 @@ the standard `traceparent` header.
 
 The web interface is distributed independently as
 `ghcr.io/awilixify/awilixify-devtools-ui`. See the
-[DevTools UI documentation](https://github.com/awilixify/awilixify-devtools/blob/main/devtools-ui/README.md)
+[DevTools UI repository](https://github.com/awilixify/awilixify-devtools-ui)
 for Docker Compose and local development instructions.
 
 ## Development

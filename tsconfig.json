@@ -1,25 +1,24 @@
 {
-  "compilerOptions": {
-    "target": "ES2022",
-    "useDefineForClassFields": true,
-    "lib": ["DOM", "DOM.Iterable", "ES2022"],
-    "allowJs": false,
-    "skipLibCheck": true,
-    "esModuleInterop": true,
-    "allowSyntheticDefaultImports": true,
-    "strict": true,
-    "forceConsistentCasingInFileNames": true,
-    "module": "ESNext",
-    "moduleResolution": "Bundler",
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "noEmit": true,
-    "jsx": "react-jsx",
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["devtools-ui/src/*"]
-    }
-  },
-  "include": ["devtools-ui/src", "devtools"],
-  "references": [{ "path": "./tsconfig.node.json" }]
+	"compilerOptions": {
+		"outDir": "dist",
+		"rootDir": "src",
+		"declaration": true,
+		"removeComments": true,
+		"resolveJsonModule": true,
+		"allowSyntheticDefaultImports": true,
+		"target": "es2022",
+		"sourceMap": false,
+		"strict": true,
+		"allowJs": false,
+		"strictPropertyInitialization": false,
+		"esModuleInterop": true,
+		"skipLibCheck": true,
+		"lib": ["es2022"],
+		"moduleDetection": "force",
+		"moduleResolution": "NodeNext",
+		"module": "NodeNext",
+		"noUncheckedIndexedAccess": true
+	},
+	"include": ["src/**/*.ts"],
+	"exclude": ["node_modules", "dist"]
 }

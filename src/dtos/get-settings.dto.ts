@@ -16,6 +16,5 @@ export const GetSettingsSchema = {
 	},
 	tags: ["Settings"],
 	summary: "Get devtools settings",
-	description:
-		"Returns the service identity and DevTools configuration",
+	description: "Returns the service identity and DevTools configuration",
 };
