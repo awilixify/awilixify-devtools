@@ -26,6 +26,12 @@ import { Tracer } from "./trace/tracer.js";
 export type DevtoolsOptions = {
 	/** Stable service identifier used to qualify graph module and trace IDs. */
 	serviceName: string;
+	/**
+	 * Analyze provider changes from the local Git checkout. Disable this when
+	 * the application runs without source files and Git metadata.
+	 * Defaults to true.
+	 */
+	providerImpact?: boolean;
 	host?: string;
 	port?: number;
 	/** URL of the real app to proxy non-devtools requests to (e.g., "http://localhost:3000") */

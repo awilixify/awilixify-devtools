@@ -45,6 +45,7 @@ DevtoolsModule({
   host: "0.0.0.0",
   port: 3221,
   appUrl: "http://127.0.0.1:3000",
+  providerImpact: true,
   traceHistoryFile: ".awilixify-devtools/traces.json",
 });
 ```
@@ -56,6 +57,9 @@ DevtoolsModule({
   `orders--trace-42`). Use lowercase letters, numbers, and hyphens.
 - `port` defaults to `3221`.
 - `appUrl` proxies non-DevTools requests to the observed application.
+- `providerImpact` defaults to `true` and analyzes changed providers using the
+  local Git checkout and TypeScript source. Set it to `false` in containers or
+  other deployments that do not include Git metadata and source files.
 - `traceHistoryFile` defaults to `.awilixify-devtools/traces.json`. Set it to
   `false` to keep traces in memory.
 

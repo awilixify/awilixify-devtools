@@ -3,6 +3,7 @@ import { type Static, Type } from "@sinclair/typebox";
 export const GetSettingsResponseSchema = Type.Object(
 	{
 		appUrl: Type.Union([Type.String(), Type.Null()]),
+		providerImpact: Type.Boolean(),
 		serviceName: Type.String(),
 	},
 	{ $id: "GetSettingsResponse" },

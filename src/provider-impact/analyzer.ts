@@ -19,6 +19,7 @@ export class ProviderImpactAnalyzer {
 
 	constructor(
 		private readonly graphCollector: Deps["graphCollector"],
+		private readonly options: Deps["options"],
 		private readonly gitChanges = new GitChanges(),
 		private readonly providerScanner = new ProviderScanner(gitChanges),
 	) {
@@ -26,6 +27,18 @@ export class ProviderImpactAnalyzer {
 	}
 
 	async analyze(): Promise<ProviderImpact> {
+		if (this.options.providerImpact === false) {
+			return {
+				changedFiles: [],
+				deletedFiles: [],
+				newFiles: [],
+				changedProviders: [],
+				deletedProviders: [],
+				newProviders: [],
+				affectedProviders: [],
+			};
+		}
+
 		// ts-morph sees current AST; git tells us file status, deletions, and changed line ranges.
 		const fileChanges = this.gitChanges.getFileChanges(this.cwd);
 

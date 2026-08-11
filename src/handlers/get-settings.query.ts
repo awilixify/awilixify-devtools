@@ -19,6 +19,7 @@ export class GetSettingsQueryHandler
 	async executor(): Promise<Response> {
 		return {
 			appUrl: this.options.appUrl ?? null,
+			providerImpact: this.options.providerImpact ?? true,
 			serviceName: this.options.serviceName,
 		};
 	}

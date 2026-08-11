@@ -1,6 +1,6 @@
 {
 	"name": "@awilixify/devtools",
-	"version": "0.2.0",
+	"version": "0.2.1",
 	"packageManager": "pnpm@10.34.4",
 	"description": "Developer tools for inspecting Awilixify module graphs, routes, traces, and provider impact.",
 	"keywords": [
