@@ -46,6 +46,7 @@ DevtoolsModule({
   port: 3221,
   appUrl: "http://127.0.0.1:3000",
   providerImpact: true,
+  traceExcludePaths: ["/health/live", "/health/ready"],
   traceHistoryFile: ".awilixify-devtools/traces.json",
 });
 ```
@@ -60,6 +61,9 @@ DevtoolsModule({
 - `providerImpact` defaults to `true` and analyzes changed providers using the
   local Git checkout and TypeScript source. Set it to `false` in containers or
   other deployments that do not include Git metadata and source files.
+- `traceExcludePaths` lists exact HTTP route paths that should not create
+  traces. It is useful for frequent infrastructure traffic such as health
+  probes.
 - `traceHistoryFile` defaults to `.awilixify-devtools/traces.json`. Set it to
   `false` to keep traces in memory.
 

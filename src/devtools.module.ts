@@ -32,6 +32,8 @@ export type DevtoolsOptions = {
 	 * Defaults to true.
 	 */
 	providerImpact?: boolean;
+	/** Exact HTTP route paths that should not create traces. */
+	traceExcludePaths?: string[];
 	host?: string;
 	port?: number;
 	/** URL of the real app to proxy non-devtools requests to (e.g., "http://localhost:3000") */

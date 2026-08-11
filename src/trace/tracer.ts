@@ -26,6 +26,7 @@ export class Tracer implements ITracer {
 			resolveTraceHistoryFile(options.traceHistoryFile),
 			(className, methodName) =>
 				graphCollector.findEntrypoint(className, methodName),
+			options.traceExcludePaths,
 		);
 	}
 

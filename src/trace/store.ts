@@ -65,6 +65,7 @@ export class DevtoolsTraceStore {
 	private readonly storage = new AsyncLocalStorage<ActiveTrace>();
 	private readonly responseSanitizer = new ResponseSanitizer();
 	private readonly traces: Trace[] = [];
+	private readonly traceExcludePaths: ReadonlySet<string>;
 	private nextTraceId = 1;
 	private pendingWrite: Promise<void> = Promise.resolve();
 
@@ -72,7 +73,11 @@ export class DevtoolsTraceStore {
 		private readonly serviceName: string,
 		private readonly historyFile: string | null = null,
 		private readonly findEntrypoint: EntrypointLookup = () => undefined,
+		traceExcludePaths: readonly string[] = [],
 	) {
+		this.traceExcludePaths = new Set(
+			traceExcludePaths.map((path) => normalizeRoutePath(path)),
+		);
 		this.loadPersistedTraces();
 	}
 
@@ -292,9 +297,13 @@ export class DevtoolsTraceStore {
 			return input.callback();
 		}
 
-		// Skip tracing devtools routes
+		// Skip DevTools traffic and explicitly excluded application routes.
 		const requestInfo = this.responseSanitizer.getRequestInfo(input.args);
-		if (requestInfo.path?.startsWith("/__devtools")) {
+		if (
+			requestInfo.path?.startsWith("/__devtools") ||
+			(requestInfo.path !== undefined &&
+				this.traceExcludePaths.has(normalizeRoutePath(requestInfo.path)))
+		) {
 			return input.callback();
 		}
 
@@ -743,6 +752,12 @@ export class DevtoolsTraceStore {
 			console.error = original.error;
 		};
 	}
+}
+
+function normalizeRoutePath(routePath: string): string {
+	if (routePath === "/") return routePath;
+
+	return routePath.replace(/\/+$/, "");
 }
 
 function getTraceparentHeader(headers: unknown): string | string[] | undefined {

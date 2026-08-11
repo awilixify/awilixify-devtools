@@ -5,6 +5,7 @@ export const GetSettingsResponseSchema = Type.Object(
 		appUrl: Type.Union([Type.String(), Type.Null()]),
 		providerImpact: Type.Boolean(),
 		serviceName: Type.String(),
+		traceExcludePaths: Type.Array(Type.String()),
 	},
 	{ $id: "GetSettingsResponse" },
 );

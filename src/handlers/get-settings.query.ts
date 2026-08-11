@@ -21,6 +21,7 @@ export class GetSettingsQueryHandler
 			appUrl: this.options.appUrl ?? null,
 			providerImpact: this.options.providerImpact ?? true,
 			serviceName: this.options.serviceName,
+			traceExcludePaths: this.options.traceExcludePaths ?? [],
 		};
 	}
 }
