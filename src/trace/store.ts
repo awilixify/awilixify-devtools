@@ -7,6 +7,7 @@ import type {
 	RunInControllerTraceInput,
 } from "awilixify/devtools";
 import {
+	AWILIXIFY_TRACE_CONTEXT_HEADER,
 	getTracePropagationContext,
 	isPromiseLike,
 	isResultLike,
@@ -343,7 +344,7 @@ export class DevtoolsTraceStore {
 	): ActiveTrace {
 		const requestInfo = this.responseSanitizer.getRequestInfo(input.args);
 		const parentContext =
-			parseTraceparent(getTraceparentHeader(requestInfo.request?.headers)) ??
+			parseTraceparent(getTraceContextHeader(requestInfo.request?.headers)) ??
 			getTracePropagationContext();
 		const label = `${input.moduleName}.${input.className}.${input.methodName}`;
 		const rootConsoleEntries: ConsoleEntry[] = [];
@@ -760,17 +761,19 @@ function normalizeRoutePath(routePath: string): string {
 	return routePath.replace(/\/+$/, "");
 }
 
-function getTraceparentHeader(headers: unknown): string | string[] | undefined {
+function getTraceContextHeader(
+	headers: unknown,
+): string | string[] | undefined {
 	if (!headers || typeof headers !== "object") return undefined;
 
 	const get = (headers as { get?: unknown }).get;
 	if (typeof get === "function") {
-		const value = get.call(headers, "traceparent");
+		const value = get.call(headers, AWILIXIFY_TRACE_CONTEXT_HEADER);
 		return typeof value === "string" ? value : undefined;
 	}
 
 	for (const [name, value] of Object.entries(headers)) {
-		if (name.toLowerCase() !== "traceparent") continue;
+		if (name.toLowerCase() !== AWILIXIFY_TRACE_CONTEXT_HEADER) continue;
 		if (typeof value === "string") return value;
 		if (Array.isArray(value)) {
 			return value.filter((item): item is string => typeof item === "string");
